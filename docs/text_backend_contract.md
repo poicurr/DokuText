@@ -7,7 +7,7 @@ DokuText is a comprehensive text shaping, layout, and atlas management backend f
 - **DokuText**: The formal name of the project and subsystem.
 - **GlyphRenderer**: The legacy project name, now considered a compatibility alias.
 - **glyphrenderer**: The current C++ namespace used for compatibility.
-- **doku::text**: The planned formal C++ namespace.
+- **doku::text**: The migration C++ namespace (available via `<DokuText/DokuText.hpp>`).
 
 "GlyphRenderer" is retained in existing code, include paths, and CMake targets during the migration period, but all new documentation and high-level descriptions use DokuText.
 

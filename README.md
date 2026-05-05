@@ -84,15 +84,16 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(DokuText)
 
-# Current compatibility target:
+# Current compatibility targets:
 target_link_libraries(your_target PRIVATE GlyphRenderer::GlyphRenderer)
+target_link_libraries(your_target PRIVATE DokuText::DokuText) # Alias available
 
 # Planned target name:
-# target_link_libraries(your_target PRIVATE DokuText::DokuText)
+# DokuText::DokuText (will become the primary target)
 ```
 
 Public header: `#include <GlyphRenderer/GlyphRenderer.hpp>` (Legacy path)
-Planned header: `#include <DokuText/DokuText.hpp>` (Compatibility alias available)
+Migration header: `#include <DokuText/DokuText.hpp>` (Available now)
 
 ## High-Level Facade
 
@@ -100,9 +101,9 @@ DokuText provides `TextSystem` and `TextAtlas` as a high-level API.
 
 ```cpp
 // Current compatibility namespace: glyphrenderer::
-// Planned namespace: doku::text::
+// Migration namespace: doku::text:: (Available now)
 
-glyphrenderer::TextSystem textSystem;
+doku::text::TextSystem textSystem;
 
 glyphrenderer::FontFallbackChain chain;
 chain.textFonts = { "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf" };
