@@ -22,7 +22,6 @@ int main() {
   assert_same<doku::text::TextSeedRequest, glyphrenderer::TextSeedRequest>();
   assert_same<doku::text::TextSeedPreset, glyphrenderer::TextSeedPreset>();
   assert_same<doku::text::GlyphAtlasCacheUpdate, glyphrenderer::GlyphAtlasCacheUpdate>();
-  assert_same<doku::text::GlyphAtlasUpdate, glyphrenderer::GlyphAtlasCacheUpdate>();
   assert_same<doku::text::AtlasPageUploadPlan, glyphrenderer::AtlasPageUploadPlan>();
   assert_same<doku::text::TextCompatibilityReport, glyphrenderer::TextCompatibilityReport>();
   assert_same<doku::text::TextAtlasOptions, glyphrenderer::TextAtlasOptions>();

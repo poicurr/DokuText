@@ -40,6 +40,7 @@ add_glyphrenderer_test(
 )
 add_glyphrenderer_test(GlyphRendererTestBakedAtlasApi BakedAtlasApiTest.cpp)
 add_glyphrenderer_test(DokuTextTestCompile DokuTextCompileTest.cpp)
+add_glyphrenderer_test(DokuTextAliasHeaderSmoke DokuTextAliasHeaderSmoke.cpp)
 
 target_include_directories(
   GlyphRendererTestVisualPng PRIVATE ${CMAKE_SOURCE_DIR}/src
