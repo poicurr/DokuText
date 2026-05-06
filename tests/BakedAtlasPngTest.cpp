@@ -1,4 +1,4 @@
-#include "GlyphRenderer/GlyphRenderer.hpp"
+#include <DokuText/DokuText.hpp>
 #include "adapter/io/PngWriter.hpp"
 #include "core/ir/Bitmap.hpp"
 
@@ -7,7 +7,7 @@
 
 namespace {
 
-[[nodiscard]] Bitmap toBitmap(const glyphrenderer::BitmapImage &image) {
+[[nodiscard]] Bitmap toBitmap(const doku::text::BitmapImage &image) {
   Bitmap bitmap;
   bitmap.resize(image.width, image.height);
   bitmap.rgba() = image.rgba;
@@ -19,8 +19,8 @@ namespace {
 int main() {
   std::cout << "[test] baked atlas png\n";
 
-  glyphrenderer::TextSystem textSystem;
-  glyphrenderer::FontFallbackChain chain;
+  doku::text::TextSystem textSystem;
+  doku::text::FontFallbackChain chain;
   chain.textFonts = {
       "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf",
   };
@@ -30,21 +30,21 @@ int main() {
   chain.symbolFonts = {
       "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf",
   };
-  const glyphrenderer::FontChainId fontChainId =
+  const doku::text::FontChainId fontChainId =
       textSystem.registerFontFallbackChain(chain);
 
-  glyphrenderer::TextAtlasBakeRequest bakeRequest;
+  doku::text::TextAtlasBakeRequest bakeRequest;
   bakeRequest.fontChainId = fontChainId;
   bakeRequest.pixelSize = 96;
   bakeRequest.atlasContext.pageWidth = 1024;
   bakeRequest.atlasContext.pageHeight = 1024;
   bakeRequest.atlasContext.padding = 2;
   bakeRequest.seedPresets = {
-      glyphrenderer::TextSeedPreset::BasicLatin,
-      glyphrenderer::TextSeedPreset::CjkSymbolsPunctuation,
-      glyphrenderer::TextSeedPreset::Hiragana,
-      glyphrenderer::TextSeedPreset::Katakana,
-      glyphrenderer::TextSeedPreset::EmojiSymbols,
+      doku::text::TextSeedPreset::BasicLatin,
+      doku::text::TextSeedPreset::CjkSymbolsPunctuation,
+      doku::text::TextSeedPreset::Hiragana,
+      doku::text::TextSeedPreset::Katakana,
+      doku::text::TextSeedPreset::EmojiSymbols,
   };
   bakeRequest.customRanges = {
       {0x65E5U, 0x65E5U},
@@ -59,7 +59,7 @@ int main() {
       "🍣🙂🚀🎉",
   };
 
-  const glyphrenderer::BakedTextAtlas bakedAtlas =
+  const doku::text::BakedTextAtlas bakedAtlas =
       textSystem.bakeTextAtlas(bakeRequest);
 
   const std::filesystem::path outputDir =
@@ -77,12 +77,12 @@ int main() {
     }
 
     std::cout << "page=" << pageIndex << " pixelFormat="
-              << glyphrenderer::toString(
+              << doku::text::toString(
                      bakedAtlas.pixelFormatForPage(pageIndex))
               << " materials=";
-    for (glyphrenderer::MaterialKind kind :
+    for (doku::text::MaterialKind kind :
          bakedAtlas.materialKindsForPage(pageIndex)) {
-      std::cout << glyphrenderer::toString(kind) << ',';
+      std::cout << doku::text::toString(kind) << ',';
     }
     std::cout << '\n';
   }

@@ -1,14 +1,14 @@
-#include "GlyphRenderer/GlyphRenderer.hpp"
+#include <DokuText/DokuText.hpp>
 
 #include <iostream>
 
 int main() {
   std::cout << "[test] fallback diagnostics\n";
 
-  glyphrenderer::GlyphRendererContext context;
-  glyphrenderer::GlyphRenderer renderer(context);
+  doku::text::DokuTextContext context;
+  doku::text::DokuText renderer(context);
 
-  glyphrenderer::TextLayoutContext layoutContext;
+  doku::text::TextLayoutContext layoutContext;
   layoutContext.fallbackChain.textFonts = {
       "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf",
   };
@@ -21,27 +21,27 @@ int main() {
   };
   layoutContext.pixelSize = 96;
 
-  const glyphrenderer::TextShapeResult shape =
+  const doku::text::TextShapeResult shape =
       renderer.shapeLine(layoutContext, "A🫨");
   std::cout << "clusters=" << shape.clusters.size()
             << " diagnostics=" << shape.diagnostics.size() << '\n';
   for (std::size_t i = 0; i < shape.clusters.size(); ++i) {
-    const glyphrenderer::ShapedCluster &cluster = shape.clusters[i];
+    const doku::text::ShapedCluster &cluster = shape.clusters[i];
     std::cout << "cluster[" << i << "] fallback=" << cluster.fallbackApplied
               << " font=" << cluster.fontPath
               << " glyphs=" << cluster.glyphs.size() << '\n';
   }
-  for (const glyphrenderer::Diagnostic &diagnostic : shape.diagnostics) {
+  for (const doku::text::Diagnostic &diagnostic : shape.diagnostics) {
     std::cout << "diagnostic severity="
-              << glyphrenderer::toString(diagnostic.severity)
-              << " code=" << glyphrenderer::toString(diagnostic.code)
+              << doku::text::toString(diagnostic.severity)
+              << " code=" << doku::text::toString(diagnostic.code)
               << " clusterText=" << diagnostic.clusterText
               << " message=" << diagnostic.message
               << " font=" << diagnostic.fontPath << '\n';
   }
-  for (const glyphrenderer::FallbackTraceEntry &entry : shape.fallbackTrace) {
+  for (const doku::text::FallbackTraceEntry &entry : shape.fallbackTrace) {
     std::cout << "trace cluster=" << entry.clusterIndex
-              << " role=" << glyphrenderer::toString(entry.requestedRole)
+              << " role=" << doku::text::toString(entry.requestedRole)
               << " text=" << entry.clusterText
               << " fallback=" << entry.fallbackApplied
               << " attempted=" << entry.attemptedFonts.size()

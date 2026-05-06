@@ -1,12 +1,12 @@
-#include "GlyphRenderer/GlyphRenderer.hpp"
+#include <DokuText/DokuText.hpp>
 
 #include <iostream>
 
 int main() {
   std::cout << "[test] integration adapter api\n";
 
-  glyphrenderer::TextSystem textSystem;
-  glyphrenderer::FontFallbackChain chain;
+  doku::text::TextSystem textSystem;
+  doku::text::FontFallbackChain chain;
   chain.textFonts = {
       "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf",
   };
@@ -16,39 +16,39 @@ int main() {
   chain.symbolFonts = {
       "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf",
   };
-  const glyphrenderer::FontChainId fontChainId =
+  const doku::text::FontChainId fontChainId =
       textSystem.registerFontFallbackChain(chain);
 
-  glyphrenderer::TextAtlasOptions atlasOptions;
+  doku::text::TextAtlasOptions atlasOptions;
   atlasOptions.fontChainId = fontChainId;
   atlasOptions.pixelSize = 64;
   atlasOptions.atlasContext.pageWidth = 512;
   atlasOptions.atlasContext.pageHeight = 512;
   atlasOptions.atlasContext.padding = 2;
-  glyphrenderer::TextAtlas atlas = textSystem.createAtlas(atlasOptions);
+  doku::text::TextAtlas atlas = textSystem.createAtlas(atlasOptions);
 
-  glyphrenderer::TextSeedRequest seedRequest;
-  seedRequest.presets = {glyphrenderer::TextSeedPreset::Ascii};
-  const glyphrenderer::TextAtlasSeedResult seedResult =
+  doku::text::TextSeedRequest seedRequest;
+  seedRequest.presets = {doku::text::TextSeedPreset::Ascii};
+  const doku::text::TextAtlasSeedResult seedResult =
       textSystem.seedAtlas(atlas, seedRequest);
   std::cout << "seed.codePoints=" << seedResult.codePoints.size()
             << " seed.pages=" << atlas.pages().size()
             << " uploadPlans=" << seedResult.atlasUploadPlan.size() << '\n';
 
-  const glyphrenderer::PreparedTextLine line =
+  const doku::text::PreparedTextLine line =
       textSystem.prepareLine(atlas, "A🍣");
-  const glyphrenderer::TextCompatibilityReport layoutCompatibility =
-      glyphrenderer::analyzeTextCompatibility(line.layout);
-  const glyphrenderer::TextCompatibilityReport compatibility =
-      glyphrenderer::analyzeTextCompatibility(line.drawRun);
-  glyphrenderer::CompatibilityConstraints constraints;
+  const doku::text::TextCompatibilityReport layoutCompatibility =
+      doku::text::analyzeTextCompatibility(line.layout);
+  const doku::text::TextCompatibilityReport compatibility =
+      doku::text::analyzeTextCompatibility(line.drawRun);
+  doku::text::CompatibilityConstraints constraints;
   constraints.allowColorGlyphs = false;
   constraints.allowMultiplePages = false;
   constraints.maxPages = 1;
-  const glyphrenderer::TextCompatibilityReport constrainedCompatibility =
-      glyphrenderer::analyzeTextCompatibility(line.drawRun, constraints);
-  const glyphrenderer::TextDrawSubmission submission =
-      glyphrenderer::buildTextDrawSubmission(line.drawRun);
+  const doku::text::TextCompatibilityReport constrainedCompatibility =
+      doku::text::analyzeTextCompatibility(line.drawRun, constraints);
+  const doku::text::TextDrawSubmission submission =
+      doku::text::buildTextDrawSubmission(line.drawRun);
   std::cout << "compat.alphaOnly=" << compatibility.alphaOnlyCompatible
             << " requiresColor=" << compatibility.requiresColorGlyph
             << " pages=" << compatibility.pagesUsed.size()
@@ -65,25 +65,25 @@ int main() {
             << " firstMaterial="
             << (submission.glyphs.empty()
                     ? "None"
-                    : glyphrenderer::toString(
+                    : doku::text::toString(
                           submission.glyphs.front().materialKind))
             << '\n';
 
   if (!atlas.pages().empty()) {
-    const glyphrenderer::BitmapImage normalized =
-        glyphrenderer::normalizeAlphaMaskToWhite(atlas.pages().front().image);
+    const doku::text::BitmapImage normalized =
+        doku::text::normalizeAlphaMaskToWhite(atlas.pages().front().image);
     std::cout << "normalizedAlpha=" << normalized.width << "x"
               << normalized.height << " uvOrigin="
-              << glyphrenderer::toString(glyphrenderer::atlasUvOrigin())
+              << doku::text::toString(doku::text::atlasUvOrigin())
               << '\n';
   }
 
-  glyphrenderer::TextPrepareOptions paragraphOptions;
+  doku::text::TextPrepareOptions paragraphOptions;
   paragraphOptions.layoutOptions.wrappingWidth = 128;
-  const glyphrenderer::PreparedTextParagraph paragraph =
+  const doku::text::PreparedTextParagraph paragraph =
       textSystem.prepareText(atlas, "Aあ\n🍣", paragraphOptions);
-  const glyphrenderer::TextCompatibilityReport paragraphCompatibility =
-      glyphrenderer::analyzeTextCompatibility(paragraph.drawRun);
+  const doku::text::TextCompatibilityReport paragraphCompatibility =
+      doku::text::analyzeTextCompatibility(paragraph.drawRun);
   std::cout << "paragraph.lines=" << paragraph.drawRun.lines.size()
             << " paragraph.pages=" << paragraphCompatibility.pagesUsed.size()
             << " paragraph.requiresColor="

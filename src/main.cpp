@@ -1,8 +1,8 @@
-#include "GlyphRenderer/GlyphRenderer.hpp"
+#include <DokuText/DokuText.hpp>
 #include "adapter/render/ColrV0Renderer.hpp"
 #include "adapter/render/ColrV1Renderer.hpp"
 
-#if GLYPH_RENDERER_ENABLE_PNG_IO
+#if DOKU_TEXT_ENABLE_PNG_IO
 #include "adapter/io/PngWriter.hpp"
 #endif
 
@@ -1023,7 +1023,7 @@ void traceSessionColrV1Stats(const char *label, const SessionColrV1Stats &stats,
 
 } // namespace
 
-namespace glyphrenderer {
+namespace doku::text {
 
 namespace {
 
@@ -1247,7 +1247,7 @@ void blitBitmapImage(BitmapImage &dst, const BitmapImage &src, int offsetX,
 
 [[nodiscard]] bool writeOutputPng(const std::string &path,
                                   const Bitmap &bitmap) {
-#if GLYPH_RENDERER_ENABLE_PNG_IO
+#if DOKU_TEXT_ENABLE_PNG_IO
   return writePng(path, bitmap);
 #else
   (void)path;
@@ -1308,7 +1308,7 @@ selectMetricsFontPath(const FontFallbackChain &chain) {
     return chain.symbolFonts.front();
   }
   throw std::invalid_argument(
-      "GlyphRenderer: FontFallbackChain is empty. Provide at least one font "
+      "DokuText: FontFallbackChain is empty. Provide at least one font "
       "path in textFonts, emojiFonts, or symbolFonts.");
 }
 
@@ -1668,7 +1668,7 @@ buildAtlasLayout(const TextLineLayout &layout,
 
 } // namespace
 
-class GlyphRendererContext::Impl {
+class DokuTextContext::Impl {
 public:
   Impl() {
     FT_Library libraryRaw = nullptr;
@@ -1714,9 +1714,9 @@ private:
   std::uint32_t m_nextFontChainId = 1;
 };
 
-class GlyphRenderer::Impl {
+class DokuText::Impl {
 public:
-  explicit Impl(GlyphRendererContext::Impl &context) : m_context(context) {}
+  explicit Impl(DokuTextContext::Impl &context) : m_context(context) {}
 
   TextShapeResult shapeLine(const TextLayoutContext &layoutContext,
                             std::string_view text) const {
@@ -2254,7 +2254,7 @@ private:
     const FontFallbackChain fallbackChain = resolveFallbackChain(layoutContext);
     if (isFallbackChainEmpty(fallbackChain)) {
       throw std::invalid_argument(
-          "GlyphRenderer: FontFallbackChain is empty. Provide at least one "
+          "DokuText: FontFallbackChain is empty. Provide at least one "
           "font path in textFonts, emojiFonts, or symbolFonts.");
     }
 
@@ -2342,27 +2342,27 @@ private:
     return resolvedClusters;
   }
 
-  GlyphRendererContext::Impl &m_context;
+  DokuTextContext::Impl &m_context;
 };
 
-GlyphRendererContext::GlyphRendererContext()
+DokuTextContext::DokuTextContext()
     : m_impl(std::make_unique<Impl>()) {}
 
-GlyphRendererContext::~GlyphRendererContext() = default;
+DokuTextContext::~DokuTextContext() = default;
 
-GlyphRendererContext::GlyphRendererContext(GlyphRendererContext &&) noexcept =
+DokuTextContext::DokuTextContext(DokuTextContext &&) noexcept =
     default;
 
-GlyphRendererContext &
-GlyphRendererContext::operator=(GlyphRendererContext &&) noexcept = default;
+DokuTextContext &
+DokuTextContext::operator=(DokuTextContext &&) noexcept = default;
 
-FontChainId GlyphRendererContext::registerFontFallbackChain(
+FontChainId DokuTextContext::registerFontFallbackChain(
     const FontFallbackChain &chain) {
   return m_impl->registerFontFallbackChain(chain);
 }
 
 FontFallbackChain
-GlyphRendererContext::resolveFontFallbackChain(FontChainId fontChainId) const {
+DokuTextContext::resolveFontFallbackChain(FontChainId fontChainId) const {
   return m_impl->resolveFontFallbackChain(fontChainId);
 }
 
@@ -2649,62 +2649,62 @@ std::vector<GlyphAtlasEntry> GlyphAtlasCache::entries() const {
   return m_impl->entries();
 }
 
-GlyphRenderer::GlyphRenderer(GlyphRendererContext &context)
+DokuText::DokuText(DokuTextContext &context)
     : m_impl(std::make_unique<Impl>(*context.m_impl)) {}
 
-GlyphRenderer::~GlyphRenderer() = default;
+DokuText::~DokuText() = default;
 
-GlyphRenderer::GlyphRenderer(GlyphRenderer &&) noexcept = default;
+DokuText::DokuText(DokuText &&) noexcept = default;
 
-GlyphRenderer &GlyphRenderer::operator=(GlyphRenderer &&) noexcept = default;
+DokuText &DokuText::operator=(DokuText &&) noexcept = default;
 
-TextShapeResult GlyphRenderer::shapeLine(const TextLayoutContext &context,
+TextShapeResult DokuText::shapeLine(const TextLayoutContext &context,
                                          std::string_view text) const {
   return m_impl->shapeLine(context, text);
 }
 
-MultiLineShapeResult GlyphRenderer::shapeText(const TextLayoutContext &context,
+MultiLineShapeResult DokuText::shapeText(const TextLayoutContext &context,
                                               std::string_view text) const {
   return m_impl->shapeText(context, text);
 }
 
 TextRasterResult
-GlyphRenderer::rasterizeLine(const TextLayoutContext &context,
+DokuText::rasterizeLine(const TextLayoutContext &context,
                              const TextShapeResult &shape) const {
   return m_impl->rasterizeLine(context, shape);
 }
 
 MultiLineRasterResult
-GlyphRenderer::rasterizeText(const TextLayoutContext &context,
+DokuText::rasterizeText(const TextLayoutContext &context,
                              const MultiLineShapeResult &shape) const {
   return m_impl->rasterizeText(context, shape);
 }
 
-TextLineLayout GlyphRenderer::layoutLine(const TextLayoutContext &context,
+TextLineLayout DokuText::layoutLine(const TextLayoutContext &context,
                                          std::string_view text) const {
   return m_impl->layoutLine(context, text);
 }
 
-TextLineLayout GlyphRenderer::layoutLine(const TextRequest &request) const {
+TextLineLayout DokuText::layoutLine(const TextRequest &request) const {
   return m_impl->layoutLine(makeTextLayoutContext(request), request.text);
 }
 
-TextLineLayout GlyphRenderer::layoutLine(const TextRasterResult &raster) const {
+TextLineLayout DokuText::layoutLine(const TextRasterResult &raster) const {
   return m_impl->layoutLine(raster);
 }
 
 AtlasBuildResult
-GlyphRenderer::buildAtlas(const TextLineLayout &layout,
+DokuText::buildAtlas(const TextLineLayout &layout,
                           const AtlasBuildContext &context) const {
   return buildAtlasLayout(layout, context);
 }
 
-TextDrawRun GlyphRenderer::buildDrawRun(const TextLineLayout &layout,
+TextDrawRun DokuText::buildDrawRun(const TextLineLayout &layout,
                                         const AtlasBuildResult &atlas) const {
   return m_impl->buildDrawRun(layout, atlas);
 }
 
-TextDrawRun GlyphRenderer::buildDrawRun(const TextLineLayout &layout,
+TextDrawRun DokuText::buildDrawRun(const TextLineLayout &layout,
                                         GlyphAtlasCache &atlasCache) const {
   GlyphAtlasCacheUpdate update = atlasCache.ensureGlyphs(layout);
   TextDrawRun result;
@@ -2747,24 +2747,24 @@ TextDrawRun GlyphRenderer::buildDrawRun(const TextLineLayout &layout,
   return result;
 }
 
-MultiLineLayout GlyphRenderer::layoutText(const TextLayoutContext &context,
+MultiLineLayout DokuText::layoutText(const TextLayoutContext &context,
                                           std::string_view text) const {
   return m_impl->layoutText(context, text);
 }
 
-MultiLineLayout GlyphRenderer::layoutText(const TextRequest &request) const {
+MultiLineLayout DokuText::layoutText(const TextRequest &request) const {
   return m_impl->layoutText(makeTextLayoutContext(request), request.text);
 }
 
 MultiLineDrawRun
-GlyphRenderer::buildDrawText(const TextLayoutContext &context,
+DokuText::buildDrawText(const TextLayoutContext &context,
                              std::string_view text,
                              const AtlasBuildContext &atlasContext) const {
   return m_impl->buildDrawText(context, text, atlasContext);
 }
 
 MultiLineDrawRun
-GlyphRenderer::buildDrawText(const MultiLineLayout &layout,
+DokuText::buildDrawText(const MultiLineLayout &layout,
                              GlyphAtlasCache &atlasCache) const {
   GlyphAtlasCacheUpdate update = atlasCache.ensureGlyphs(layout);
   MultiLineDrawRun result;
@@ -2823,13 +2823,13 @@ GlyphRenderer::buildDrawText(const MultiLineLayout &layout,
   return result;
 }
 
-TextDrawRun GlyphRenderer::prepareLine(const TextRequest &request,
+TextDrawRun DokuText::prepareLine(const TextRequest &request,
                                        GlyphAtlasCache &atlasCache) const {
   const TextLineLayout layout = layoutLine(request);
   return buildDrawRun(layout, atlasCache);
 }
 
-MultiLineDrawRun GlyphRenderer::prepareText(const TextRequest &request,
+MultiLineDrawRun DokuText::prepareText(const TextRequest &request,
                                             GlyphAtlasCache &atlasCache) const {
   const MultiLineLayout layout = layoutText(request);
   return buildDrawText(layout, atlasCache);
@@ -3794,8 +3794,8 @@ class TextSystem::Impl {
 public:
   Impl() : m_renderer(m_context) {}
 
-  GlyphRendererContext m_context;
-  GlyphRenderer m_renderer;
+  DokuTextContext m_context;
+  DokuText m_renderer;
 };
 
 TextSystem::TextSystem() : m_impl(std::make_unique<Impl>()) {}
@@ -4329,11 +4329,11 @@ int runCli(const std::vector<std::string> &args) {
       throw std::invalid_argument("--scan-colrv1-* オプションは "
                                   "--scan-colrv1 と併用してください");
     }
-#if !GLYPH_RENDERER_ENABLE_PNG_IO
+#if !DOKU_TEXT_ENABLE_PNG_IO
     if (!listColrGlyphs && !scanColrV1Glyphs) {
       throw std::runtime_error(
           "このビルドでは PNG 出力が無効です。"
-          "GLYPH_RENDERER_ENABLE_PNG_IO=ON で再ビルドしてください");
+          "DOKU_TEXT_ENABLE_PNG_IO=ON で再ビルドしてください");
     }
 #endif
 
@@ -4658,4 +4658,4 @@ int runCli(int argc, char *argv[]) {
   return runCli(args);
 }
 
-} // namespace glyphrenderer
+} // namespace doku::text

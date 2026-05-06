@@ -1,6 +1,6 @@
-function(add_glyphrenderer_test target_name source_file)
+function(add_dokutext_test target_name source_file)
   add_executable(${target_name} ${source_file})
-  target_link_libraries(${target_name} PRIVATE GlyphRenderer::GlyphRenderer)
+  target_link_libraries(${target_name} PRIVATE DokuText::DokuText)
   target_compile_features(${target_name} PRIVATE cxx_std_20)
 
   if(WIN32)
@@ -10,41 +10,40 @@ function(add_glyphrenderer_test target_name source_file)
   endif()
 endfunction()
 
-add_glyphrenderer_test(GlyphRendererTestSmoke SmokeCliTest.cpp)
-add_glyphrenderer_test(GlyphRendererTestRenderTextApi RenderTextApiTest.cpp)
-add_glyphrenderer_test(GlyphRendererTestMetricsLog MetricsLogTest.cpp)
-add_glyphrenderer_test(GlyphRendererTestScanLog ScanLogTest.cpp)
-add_glyphrenderer_test(
-  GlyphRendererTestFallbackDiagnostics
+add_dokutext_test(DokuTextTestSmoke SmokeCliTest.cpp)
+add_dokutext_test(DokuTextTestRenderTextApi RenderTextApiTest.cpp)
+add_dokutext_test(DokuTextTestMetricsLog MetricsLogTest.cpp)
+add_dokutext_test(DokuTextTestScanLog ScanLogTest.cpp)
+add_dokutext_test(
+  DokuTextTestFallbackDiagnostics
   FallbackDiagnosticsTest.cpp
 )
-add_glyphrenderer_test(
-  GlyphRendererTestShapeLayoutAtlas
+add_dokutext_test(
+  DokuTextTestShapeLayoutAtlas
   ShapeLayoutAtlasTest.cpp
 )
-add_glyphrenderer_test(
-  GlyphRendererTestMultiLineTextApi
+add_dokutext_test(
+  DokuTextTestMultiLineTextApi
   MultiLineTextApiTest.cpp
 )
-add_glyphrenderer_test(GlyphRendererTestAtlasCacheApi AtlasCacheApiTest.cpp)
-add_glyphrenderer_test(GlyphRendererTestVisualPng VisualPngScenarioTest.cpp)
-add_glyphrenderer_test(GlyphRendererTestBakedAtlasPng BakedAtlasPngTest.cpp)
-add_glyphrenderer_test(GlyphRendererTestEmptyFallback EmptyFallbackTest.cpp)
-add_glyphrenderer_test(
-  GlyphRendererTestIntegrationAdapter
+add_dokutext_test(DokuTextTestAtlasCacheApi AtlasCacheApiTest.cpp)
+add_dokutext_test(DokuTextTestVisualPng VisualPngScenarioTest.cpp)
+add_dokutext_test(DokuTextTestBakedAtlasPng BakedAtlasPngTest.cpp)
+add_dokutext_test(DokuTextTestEmptyFallback EmptyFallbackTest.cpp)
+add_dokutext_test(
+  DokuTextTestIntegrationAdapter
   IntegrationAdapterTest.cpp
 )
-add_glyphrenderer_test(
-  GlyphRendererTestTextSystemFacade
+add_dokutext_test(
+  DokuTextTestTextSystemFacade
   TextSystemFacadeTest.cpp
 )
-add_glyphrenderer_test(GlyphRendererTestBakedAtlasApi BakedAtlasApiTest.cpp)
-add_glyphrenderer_test(DokuTextTestCompile DokuTextCompileTest.cpp)
-add_glyphrenderer_test(DokuTextAliasHeaderSmoke DokuTextAliasHeaderSmoke.cpp)
+add_dokutext_test(DokuTextTestBakedAtlasApi BakedAtlasApiTest.cpp)
+add_dokutext_test(DokuTextPublicHeaderSmoke DokuTextPublicHeaderSmoke.cpp)
 
 target_include_directories(
-  GlyphRendererTestVisualPng PRIVATE ${CMAKE_SOURCE_DIR}/src
+  DokuTextTestVisualPng PRIVATE ${CMAKE_SOURCE_DIR}/src
 )
 target_include_directories(
-  GlyphRendererTestBakedAtlasPng PRIVATE ${CMAKE_SOURCE_DIR}/src
+  DokuTextTestBakedAtlasPng PRIVATE ${CMAKE_SOURCE_DIR}/src
 )

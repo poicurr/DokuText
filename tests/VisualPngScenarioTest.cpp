@@ -1,4 +1,4 @@
-#include "GlyphRenderer/GlyphRenderer.hpp"
+#include <DokuText/DokuText.hpp>
 #include "adapter/io/PngWriter.hpp"
 #include "core/ir/Bitmap.hpp"
 
@@ -16,7 +16,7 @@ struct VisualScenario {
   int wrappingWidth = 0;
 };
 
-[[nodiscard]] Bitmap toBitmap(const glyphrenderer::BitmapImage &image) {
+[[nodiscard]] Bitmap toBitmap(const doku::text::BitmapImage &image) {
   Bitmap bitmap;
   bitmap.resize(image.width, image.height);
   bitmap.rgba() = image.rgba;
@@ -24,7 +24,7 @@ struct VisualScenario {
 }
 
 [[nodiscard]] Bitmap
-composeParagraph(const glyphrenderer::MultiLineDrawRun &drawRun) {
+composeParagraph(const doku::text::MultiLineDrawRun &drawRun) {
   constexpr int PADDING = 8;
 
   int minX = 0;
@@ -33,8 +33,8 @@ composeParagraph(const glyphrenderer::MultiLineDrawRun &drawRun) {
   int maxY = 1;
   bool hasVisibleGlyph = false;
 
-  for (const glyphrenderer::PositionedGlyph &glyph : drawRun.glyphs) {
-    const glyphrenderer::BitmapImage &image = glyph.glyph.image;
+  for (const doku::text::PositionedGlyph &glyph : drawRun.glyphs) {
+    const doku::text::BitmapImage &image = glyph.glyph.image;
     if (image.width <= 0 || image.height <= 0) {
       continue;
     }
@@ -62,8 +62,8 @@ composeParagraph(const glyphrenderer::MultiLineDrawRun &drawRun) {
   const int height = std::max(maxY - minY + PADDING * 2, 1);
   canvas.resize(width, height);
   canvas.clear(0, 0, 0, 0);
-  for (const glyphrenderer::PositionedGlyph &glyph : drawRun.glyphs) {
-    const glyphrenderer::BitmapImage &image = glyph.glyph.image;
+  for (const doku::text::PositionedGlyph &glyph : drawRun.glyphs) {
+    const doku::text::BitmapImage &image = glyph.glyph.image;
     if (image.width <= 0 || image.height <= 0) {
       continue;
     }
@@ -113,8 +113,8 @@ composeParagraph(const glyphrenderer::MultiLineDrawRun &drawRun) {
 int main() {
   std::cout << "[test] visual png scenario\n";
 
-  glyphrenderer::GlyphRendererContext context;
-  glyphrenderer::FontFallbackChain chain;
+  doku::text::DokuTextContext context;
+  doku::text::FontFallbackChain chain;
   chain.textFonts = {
       "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf",
   };
@@ -124,15 +124,15 @@ int main() {
   chain.symbolFonts = {
       "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf",
   };
-  const glyphrenderer::FontChainId fontChainId =
+  const doku::text::FontChainId fontChainId =
       context.registerFontFallbackChain(chain);
 
-  glyphrenderer::GlyphRenderer renderer(context);
-  glyphrenderer::AtlasBuildContext atlasContext;
+  doku::text::DokuText renderer(context);
+  doku::text::AtlasBuildContext atlasContext;
   atlasContext.pageWidth = 512;
   atlasContext.pageHeight = 512;
   atlasContext.padding = 2;
-  glyphrenderer::GlyphAtlasCache atlasCache(atlasContext);
+  doku::text::GlyphAtlasCache atlasCache(atlasContext);
 
   const std::vector<VisualScenario> scenarios = {
       {
@@ -166,14 +166,14 @@ int main() {
   std::size_t totalGlyphCount = 0;
 
   for (const VisualScenario &scenario : scenarios) {
-    glyphrenderer::TextRequest request;
+    doku::text::TextRequest request;
     request.text = scenario.text;
     request.fontChainId = fontChainId;
     request.pixelSize = 96;
     request.layoutOptions.wrappingWidth = scenario.wrappingWidth;
     request.layoutOptions.lineSpacingMultiplier = 1.15F;
 
-    const glyphrenderer::MultiLineDrawRun drawRun =
+    const doku::text::MultiLineDrawRun drawRun =
         renderer.prepareText(request, atlasCache);
     const Bitmap composed = composeParagraph(drawRun);
     composedScenarios.push_back(composed);

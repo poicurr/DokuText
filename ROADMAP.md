@@ -49,34 +49,25 @@ This roadmap outlines the evolution of DokuText from a color glyph renderer to a
 ## 6. Migration & Refactoring
 
 - [x] **Phase A: Documentation & Naming**
-  - [x] Repository rename to DokuText
-  - [x] README / ROADMAP updates
-  - [x] Project contract definition
-  - [x] Initial `<DokuText/DokuText.hpp>` migration alias header
+  - [x] Repository name DokuText
+  - [x] text backend contract
+  - [x] renderer contract
 
-- [ ] **Phase B: Compatibility Alias Stabilization**
-  - [ ] Expand `doku::text` alias coverage for renderer-integration types
-  - [ ] Add alias-header compile smoke test
-  - [ ] Keep `glyphrenderer` namespace stable
-  - [ ] Keep `GlyphRenderer::GlyphRenderer` target stable
+- [x] **Phase B: Clean DokuText API Migration**
+  - [x] public header <DokuText/DokuText.hpp>
+  - [x] namespace doku::text
+  - [x] CMake target DokuText::DokuText
+  - [x] examples/tests updated to DokuText API
 
 - [ ] **Phase C: DokuEngine Adapter**
-  - [ ] Add UiFontAtlas adapter boundary
-  - [ ] Bridge DokuText atlas page metadata into DokuEngine core/ir types
-  - [ ] Bridge text cache invalidation policy
+  - [ ] UiFontAtlas adapter
+  - [ ] atlas metadata bridge
+  - [ ] text cache invalidation bridge
 
 - [ ] **Phase D: Budgeted Dynamic Atlas Integration**
-  - [ ] Pending missing glyph queue
-  - [ ] Max glyphs per frame budget
-  - [ ] Dirty rect incremental GPU updates
-  - [ ] DokuEngine `UiTextCache` retry/invalidation bridge
-  - [ ] Atlas page compaction and eviction policy
-
-- [ ] **Phase E: Physical Rename**
-  - [ ] Physical C++ namespace migration to `doku::text`
-  - [ ] CMake target migration to `DokuText::DokuText`
-  - [ ] Include path migration
-  - [ ] Legacy `GlyphRenderer` compatibility removal policy
+  - [ ] pending missing glyph queue
+  - [ ] max glyphs per frame
+  - [ ] dirty rect GPU updates
 
 ---
 *Last Updated: 2026-03-07*

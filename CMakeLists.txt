@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(GlyphRenderer VERSION 0.1.0 LANGUAGES C CXX)
+project(DokuText VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -31,101 +31,100 @@ endif()
 
 add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 
-option(GLYPH_RENDERER_BUILD_CLI "Build GlyphRenderer CLI executable" ON)
-option(GLYPH_RENDERER_BUILD_EXAMPLES "Build GlyphRenderer examples" ON)
-option(GLYPH_RENDERER_BUILD_TESTS "Build GlyphRenderer tests" ON)
+option(DOKU_TEXT_BUILD_CLI "Build DokuText CLI executable" ON)
+option(DOKU_TEXT_BUILD_EXAMPLES "Build DokuText examples" ON)
+option(DOKU_TEXT_BUILD_TESTS "Build DokuText tests" ON)
 
-set(GLYPH_RENDERER_ENABLE_PNG_IO_DEFAULT OFF)
-if (GLYPH_RENDERER_BUILD_CLI OR GLYPH_RENDERER_BUILD_EXAMPLES OR GLYPH_RENDERER_BUILD_TESTS)
-  set(GLYPH_RENDERER_ENABLE_PNG_IO_DEFAULT ON)
+set(DOKU_TEXT_ENABLE_PNG_IO_DEFAULT OFF)
+if (DOKU_TEXT_BUILD_CLI OR DOKU_TEXT_BUILD_EXAMPLES OR DOKU_TEXT_BUILD_TESTS)
+  set(DOKU_TEXT_ENABLE_PNG_IO_DEFAULT ON)
 endif()
-option(GLYPH_RENDERER_ENABLE_PNG_IO
+option(DOKU_TEXT_ENABLE_PNG_IO
   "Enable PNG output support for CLI, examples, and tests"
-  ${GLYPH_RENDERER_ENABLE_PNG_IO_DEFAULT}
+  ${DOKU_TEXT_ENABLE_PNG_IO_DEFAULT}
 )
 
-if ((GLYPH_RENDERER_BUILD_CLI OR GLYPH_RENDERER_BUILD_EXAMPLES OR GLYPH_RENDERER_BUILD_TESTS) AND
-    NOT GLYPH_RENDERER_ENABLE_PNG_IO)
+if ((DOKU_TEXT_BUILD_CLI OR DOKU_TEXT_BUILD_EXAMPLES OR DOKU_TEXT_BUILD_TESTS) AND
+    NOT DOKU_TEXT_ENABLE_PNG_IO)
   message(FATAL_ERROR
-    "GLYPH_RENDERER_ENABLE_PNG_IO must be ON when CLI, examples, or tests are enabled")
+    "DOKU_TEXT_ENABLE_PNG_IO must be ON when CLI, examples, or tests are enabled")
 endif()
 
-find_package(Freetype CONFIG REQUIRED)
-find_package(harfbuzz CONFIG REQUIRED)
-if (GLYPH_RENDERER_ENABLE_PNG_IO)
+find_package(freetype CONFIG REQUIRED)
+find_package(harfbuzz REQUIRED)
+if (DOKU_TEXT_ENABLE_PNG_IO)
   find_package(PNG REQUIRED)
 endif()
 
-add_library(GlyphRenderer
+add_library(DokuText
   src/main.cpp
   src/core/ir/Bitmap.cpp
   src/adapter/render/ColrV0Renderer.cpp
   src/adapter/render/ColrV1Renderer.cpp
 )
-if (GLYPH_RENDERER_ENABLE_PNG_IO)
-  target_sources(GlyphRenderer PRIVATE
+if (DOKU_TEXT_ENABLE_PNG_IO)
+  target_sources(DokuText PRIVATE
     src/adapter/io/PngWriter.cpp
   )
 endif()
-add_library(GlyphRenderer::GlyphRenderer ALIAS GlyphRenderer)
-add_library(DokuText::DokuText ALIAS GlyphRenderer)
+add_library(DokuText::DokuText ALIAS DokuText)
 
-target_include_directories(GlyphRenderer
+target_include_directories(DokuText
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
   PRIVATE
     src
 )
-target_link_libraries(GlyphRenderer PUBLIC
+target_link_libraries(DokuText PUBLIC
   Freetype::Freetype
   harfbuzz::harfbuzz
 )
-if (GLYPH_RENDERER_ENABLE_PNG_IO)
-  target_link_libraries(GlyphRenderer PUBLIC PNG::PNG)
-  target_compile_definitions(GlyphRenderer PRIVATE GLYPH_RENDERER_ENABLE_PNG_IO=1)
+if (DOKU_TEXT_ENABLE_PNG_IO)
+  target_link_libraries(DokuText PUBLIC PNG::PNG)
+  target_compile_definitions(DokuText PRIVATE DOKU_TEXT_ENABLE_PNG_IO=1)
 else()
-  target_compile_definitions(GlyphRenderer PRIVATE GLYPH_RENDERER_ENABLE_PNG_IO=0)
+  target_compile_definitions(DokuText PRIVATE DOKU_TEXT_ENABLE_PNG_IO=0)
 endif()
-target_compile_features(GlyphRenderer PUBLIC cxx_std_20)
+target_compile_features(DokuText PUBLIC cxx_std_20)
 if (WIN32)
-  target_compile_definitions(GlyphRenderer PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+  target_compile_definitions(DokuText PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 endif()
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   if (WIN32)
   else()
-    target_compile_options(GlyphRenderer PRIVATE -stdlib=libstdc++)
-    target_link_options(GlyphRenderer PRIVATE -stdlib=libstdc++ -lc++abi)
+    target_compile_options(DokuText PRIVATE -stdlib=libstdc++)
+    target_link_options(DokuText PRIVATE -stdlib=libstdc++ -lc++abi)
   endif()
 endif()
 
-if (GLYPH_RENDERER_BUILD_CLI)
+if (DOKU_TEXT_BUILD_CLI)
   add_executable(app
     src/cli_main.cpp
   )
-  target_link_libraries(app PRIVATE GlyphRenderer::GlyphRenderer)
+  target_link_libraries(app PRIVATE DokuText::DokuText)
   target_compile_features(app PRIVATE cxx_std_20)
   if (WIN32)
     target_compile_definitions(app PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
   endif()
 endif()
 
-if (GLYPH_RENDERER_BUILD_EXAMPLES)
+if (DOKU_TEXT_BUILD_EXAMPLES)
   add_subdirectory(examples)
 endif()
 
-if (GLYPH_RENDERER_BUILD_TESTS)
+if (DOKU_TEXT_BUILD_TESTS)
   add_subdirectory(tests)
 endif()
 
-install(TARGETS GlyphRenderer EXPORT GlyphRendererTargets
+install(TARGETS DokuText EXPORT DokuTextTargets
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
 install(DIRECTORY include/ DESTINATION include)
-install(EXPORT GlyphRendererTargets
-  FILE GlyphRendererTargets.cmake
-  NAMESPACE GlyphRenderer::
-  DESTINATION lib/cmake/GlyphRenderer
+install(EXPORT DokuTextTargets
+  FILE DokuTextTargets.cmake
+  NAMESPACE DokuText::
+  DESTINATION lib/cmake/DokuText
 )

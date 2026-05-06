@@ -1,12 +1,12 @@
-#include "GlyphRenderer/GlyphRenderer.hpp"
+#include <DokuText/DokuText.hpp>
 
 #include <iostream>
 
 int main() {
   std::cout << "[test] text system facade\n";
 
-  glyphrenderer::TextSystem textSystem;
-  glyphrenderer::FontFallbackChain chain;
+  doku::text::TextSystem textSystem;
+  doku::text::FontFallbackChain chain;
   chain.textFonts = {
       "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf",
   };
@@ -16,30 +16,30 @@ int main() {
   chain.symbolFonts = {
       "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf",
   };
-  const glyphrenderer::FontChainId fontChainId =
+  const doku::text::FontChainId fontChainId =
       textSystem.registerFontFallbackChain(chain);
 
-  glyphrenderer::TextAtlasOptions atlasOptions;
+  doku::text::TextAtlasOptions atlasOptions;
   atlasOptions.fontChainId = fontChainId;
   atlasOptions.pixelSize = 96;
   atlasOptions.atlasContext.pageWidth = 512;
   atlasOptions.atlasContext.pageHeight = 512;
   atlasOptions.atlasContext.padding = 2;
-  glyphrenderer::TextAtlas atlas = textSystem.createAtlas(atlasOptions);
+  doku::text::TextAtlas atlas = textSystem.createAtlas(atlasOptions);
 
-  glyphrenderer::TextSeedRequest seedRequest;
-  seedRequest.presets = {glyphrenderer::TextSeedPreset::Ascii,
-                         glyphrenderer::TextSeedPreset::NerdFont};
+  doku::text::TextSeedRequest seedRequest;
+  seedRequest.presets = {doku::text::TextSeedPreset::Ascii,
+                         doku::text::TextSeedPreset::NerdFont};
   seedRequest.customRanges = {{0x3042U, 0x3044U}};
   seedRequest.texts = {"🍣"};
-  const glyphrenderer::TextAtlasSeedResult seedResult =
+  const doku::text::TextAtlasSeedResult seedResult =
       textSystem.seedAtlas(atlas, seedRequest);
 
-  const glyphrenderer::PreparedTextLine line =
+  const doku::text::PreparedTextLine line =
       textSystem.prepareLine(atlas, "Aあ🍣");
-  glyphrenderer::TextPrepareOptions paragraphOptions;
+  doku::text::TextPrepareOptions paragraphOptions;
   paragraphOptions.layoutOptions.wrappingWidth = 240;
-  const glyphrenderer::PreparedTextParagraph paragraph =
+  const doku::text::PreparedTextParagraph paragraph =
       textSystem.prepareText(atlas, "Aあ🍣\n", paragraphOptions);
 
   std::cout << "seed.codePoints=" << seedResult.codePoints.size()

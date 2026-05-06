@@ -1,31 +1,31 @@
-#include "GlyphRenderer/GlyphRenderer.hpp"
+#include <DokuText/DokuText.hpp>
 
 #include <iostream>
 
 int main() {
   std::cout << "[test] shape layout atlas pipeline\n";
 
-  glyphrenderer::GlyphRendererContext context;
-  glyphrenderer::FontFallbackChain chain;
+  doku::text::DokuTextContext context;
+  doku::text::FontFallbackChain chain;
   chain.textFonts = {
       "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf",
   };
   chain.emojiFonts = {
       "fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf",
   };
-  const glyphrenderer::FontChainId fontChainId =
+  const doku::text::FontChainId fontChainId =
       context.registerFontFallbackChain(chain);
-  glyphrenderer::GlyphRenderer renderer(context);
-  glyphrenderer::GlyphAtlasCache atlasCache({});
+  doku::text::DokuText renderer(context);
+  doku::text::GlyphAtlasCache atlasCache({});
 
-  glyphrenderer::TextRequest request;
+  doku::text::TextRequest request;
   request.text = "Aあ🍣";
   request.fontChainId = fontChainId;
   request.pixelSize = 128;
   request.verifyMetrics = true;
 
-  const glyphrenderer::TextLineLayout layout = renderer.layoutLine(request);
-  const glyphrenderer::TextDrawRun drawRun =
+  const doku::text::TextLineLayout layout = renderer.layoutLine(request);
+  const doku::text::TextDrawRun drawRun =
       renderer.prepareLine(request, atlasCache);
 
   std::cout << "layoutGlyphs=" << layout.glyphs.size()
@@ -36,7 +36,7 @@ int main() {
             << " baseline=" << layout.metrics.baseline
             << " lineWidth=" << layout.metrics.lineWidth
             << " atlasPages=" << drawRun.summary.atlasPageCount << '\n';
-  const std::vector<glyphrenderer::GlyphAtlasEntry> atlasEntries =
+  const std::vector<doku::text::GlyphAtlasEntry> atlasEntries =
       atlasCache.entries();
   if (!layout.glyphs.empty() && !atlasEntries.empty() && !drawRun.glyphs.empty()) {
     std::cout << "handleMatch="
