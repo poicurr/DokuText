@@ -86,14 +86,43 @@ FetchContent_MakeAvailable(DokuText)
 
 # Current compatibility targets:
 target_link_libraries(your_target PRIVATE GlyphRenderer::GlyphRenderer)
-target_link_libraries(your_target PRIVATE DokuText::DokuText) # Alias available
 
-# Planned target name:
-# DokuText::DokuText (will become the primary target)
+# Current migration alias API:
+# target_link_libraries(your_target PRIVATE DokuText::DokuText)
+
+# Planned final target name:
+# DokuText::DokuText
 ```
 
 Public header: `#include <GlyphRenderer/GlyphRenderer.hpp>` (Legacy path)
 Migration header: `#include <DokuText/DokuText.hpp>` (Available now)
+
+## Current / Migration / Planned API Names
+
+Current stable API:
+
+    #include <GlyphRenderer/GlyphRenderer.hpp>
+    glyphrenderer::TextSystem textSystem;
+
+Current CMake target:
+
+    target_link_libraries(your_target PRIVATE GlyphRenderer::GlyphRenderer)
+
+Current migration alias API:
+
+    #include <DokuText/DokuText.hpp>
+    doku::text::TextSystem textSystem;
+
+Planned final API:
+
+    #include <DokuText/DokuText.hpp>
+    doku::text::TextSystem textSystem;
+
+Planned final CMake target:
+
+    target_link_libraries(your_target PRIVATE DokuText::DokuText)
+
+`DokuText::DokuText` is planned and must not be documented as current unless the target actually exists.
 
 ## High-Level Facade
 
@@ -105,25 +134,25 @@ DokuText provides `TextSystem` and `TextAtlas` as a high-level API.
 
 doku::text::TextSystem textSystem;
 
-glyphrenderer::FontFallbackChain chain;
+doku::text::FontFallbackChain chain;
 chain.textFonts = { "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf" };
 chain.emojiFonts = { "fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf" };
 
-glyphrenderer::FontChainId uiFontFamily = textSystem.registerFontFallbackChain(chain);
+doku::text::FontChainId uiFontFamily = textSystem.registerFontFallbackChain(chain);
 
-glyphrenderer::TextAtlasOptions atlasOptions;
+doku::text::TextAtlasOptions atlasOptions;
 atlasOptions.fontChainId = uiFontFamily;
 atlasOptions.pixelSize = 16;
-glyphrenderer::TextAtlas atlas = textSystem.createAtlas(atlasOptions);
+doku::text::TextAtlas atlas = textSystem.createAtlas(atlasOptions);
 
 // Seeding the atlas
-glyphrenderer::TextSeedRequest seedRequest;
-seedRequest.presets = { glyphrenderer::TextSeedPreset::Ascii };
+doku::text::TextSeedRequest seedRequest;
+seedRequest.presets = { doku::text::TextSeedPreset::Ascii };
 seedRequest.texts = {"Aあ🍣"};
 textSystem.seedAtlas(atlas, seedRequest);
 
 // Preparing draw-ready text
-glyphrenderer::PreparedTextParagraph paragraph = textSystem.prepareText(atlas, "Hello\nWorld 🍣");
+doku::text::PreparedTextParagraph paragraph = textSystem.prepareText(atlas, "Hello\nWorld 🍣");
 ```
 
 ## Static Atlas API

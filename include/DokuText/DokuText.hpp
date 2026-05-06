@@ -4,23 +4,29 @@
 
 namespace doku::text {
 
-using TextSystem = ::glyphrenderer::TextSystem;
-using TextAtlas = ::glyphrenderer::TextAtlas;
-using BakedTextAtlas = ::glyphrenderer::BakedTextAtlas;
-using PreparedTextLine = ::glyphrenderer::PreparedTextLine;
-using PreparedTextParagraph = ::glyphrenderer::PreparedTextParagraph;
-using FontFallbackChain = ::glyphrenderer::FontFallbackChain;
-using FontChainId = ::glyphrenderer::FontChainId;
-using TextRequest = ::glyphrenderer::TextRequest;
-using TextSeedRequest = ::glyphrenderer::TextSeedRequest;
-using TextSeedPreset = ::glyphrenderer::TextSeedPreset;
-using GlyphAtlasCacheUpdate = ::glyphrenderer::GlyphAtlasCacheUpdate;
-using GlyphAtlasUpdate = ::glyphrenderer::GlyphAtlasCacheUpdate;
-using AtlasPageUploadPlan = ::glyphrenderer::AtlasPageUploadPlan;
-using TextCompatibilityReport = ::glyphrenderer::TextCompatibilityReport;
-using TextAtlasOptions = ::glyphrenderer::TextAtlasOptions;
-using TextAtlasSeedResult = ::glyphrenderer::TextAtlasSeedResult;
-using TextPrepareOptions = ::glyphrenderer::TextPrepareOptions;
-using AtlasBuildContext = ::glyphrenderer::AtlasBuildContext;
+using ::glyphrenderer::AtlasBuildContext;
+using ::glyphrenderer::AtlasPageUploadPlan;
+using ::glyphrenderer::BakedTextAtlas;
+using ::glyphrenderer::BlendHint;
+using ::glyphrenderer::CompatibilityConstraints;
+using ::glyphrenderer::FontChainId;
+using ::glyphrenderer::FontFallbackChain;
+using ::glyphrenderer::GlyphAtlasCacheUpdate;
+using ::glyphrenderer::MaterialKind;
+using ::glyphrenderer::MultiLineDrawRun;
+using ::glyphrenderer::PositionedDrawGlyph;
+using ::glyphrenderer::PreparedTextLine;
+using ::glyphrenderer::PreparedTextParagraph;
+using ::glyphrenderer::SamplerKind;
+using ::glyphrenderer::TextAtlas;
+using ::glyphrenderer::TextAtlasOptions;
+using ::glyphrenderer::TextAtlasSeedResult;
+using ::glyphrenderer::TextCompatibilityReport;
+using ::glyphrenderer::TextDrawRun;
+using ::glyphrenderer::TextPrepareOptions;
+using ::glyphrenderer::TextRequest;
+using ::glyphrenderer::TextSeedPreset;
+using ::glyphrenderer::TextSeedRequest;
+using ::glyphrenderer::TextSystem;
 
 } // namespace doku::text

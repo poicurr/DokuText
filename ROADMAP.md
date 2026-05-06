@@ -22,15 +22,15 @@ This roadmap outlines the evolution of DokuText from a color glyph renderer to a
 - [ ] Complex script refinement (Indic, etc.)
 
 ## 3. Atlas Systems
-- [x] `BakedTextAtlas` (Immutable static atlas)
-- [x] `TextAtlas` (Mutable dynamic atlas base)
+- [x] `BakedTextAtlas` immutable static atlas
+- [x] `TextAtlas` mutable atlas model
 - [x] Seed presets and range requests
-- [x] Incremental upload plans
-- [ ] **Phase 2.0: Dynamic Glyph Append**
-  - [ ] On-demand glyph rasterization during layout
-  - [ ] Missing glyph queue and background processing
-  - [ ] Dirty rect incremental GPU updates
-  - [ ] Atlas page compaction and eviction policies
+- [x] Synchronous glyph ensure path through `seedAtlas`, `prepareLine`, and `prepareText`
+- [x] Renderer-facing upload plan helpers
+- [ ] Budgeted missing glyph queue for DokuEngine integration
+- [ ] Max glyphs per frame policy
+- [ ] Dirty rect incremental GPU upload integration
+- [ ] Atlas page compaction and eviction policy
 
 ## 4. Renderer Integration
 - [x] Draw-ready submission (`PositionedDrawGlyph`)
@@ -47,18 +47,36 @@ This roadmap outlines the evolution of DokuText from a color glyph renderer to a
 - [ ] Shared atlas management across UI contexts
 
 ## 6. Migration & Refactoring
+
 - [x] **Phase A: Documentation & Naming**
   - [x] Repository rename to DokuText
   - [x] README / ROADMAP updates
   - [x] Project contract definition
-- [ ] **Phase B: Compatibility Aliases**
-  - [ ] `doku::text` namespace aliases
+  - [x] Initial `<DokuText/DokuText.hpp>` migration alias header
+
+- [ ] **Phase B: Compatibility Alias Stabilization**
+  - [ ] Expand `doku::text` alias coverage for renderer-integration types
+  - [ ] Add alias-header compile smoke test
+  - [ ] Keep `glyphrenderer` namespace stable
+  - [ ] Keep `GlyphRenderer::GlyphRenderer` target stable
+
 - [ ] **Phase C: DokuEngine Adapter**
-- [ ] **Phase D: Dynamic Atlas**
+  - [ ] Add UiFontAtlas adapter boundary
+  - [ ] Bridge DokuText atlas page metadata into DokuEngine core/ir types
+  - [ ] Bridge text cache invalidation policy
+
+- [ ] **Phase D: Budgeted Dynamic Atlas Integration**
+  - [ ] Pending missing glyph queue
+  - [ ] Max glyphs per frame budget
+  - [ ] Dirty rect incremental GPU updates
+  - [ ] DokuEngine `UiTextCache` retry/invalidation bridge
+  - [ ] Atlas page compaction and eviction policy
+
 - [ ] **Phase E: Physical Rename**
-  - [ ] C++ namespace `doku::text`
-  - [ ] CMake target `DokuText::DokuText`
-  - [ ] Include path `<DokuText/DokuText.hpp>`
+  - [ ] Physical C++ namespace migration to `doku::text`
+  - [ ] CMake target migration to `DokuText::DokuText`
+  - [ ] Include path migration
+  - [ ] Legacy `GlyphRenderer` compatibility removal policy
 
 ---
 *Last Updated: 2026-03-07*
