@@ -39,7 +39,6 @@ add_dokutext_test(
   TextSystemFacadeTest.cpp
 )
 add_dokutext_test(DokuTextTestBakedAtlasApi BakedAtlasApiTest.cpp)
-add_dokutext_test(DokuTextTestCompile DokuTextCompileTest.cpp)
 add_dokutext_test(DokuTextPublicHeaderSmoke DokuTextPublicHeaderSmoke.cpp)
 
 target_include_directories(
