@@ -68,6 +68,7 @@ if (GLYPH_RENDERER_ENABLE_PNG_IO)
   )
 endif()
 add_library(GlyphRenderer::GlyphRenderer ALIAS GlyphRenderer)
+add_library(DokuText::DokuText ALIAS GlyphRenderer)
 
 target_include_directories(GlyphRenderer
   PUBLIC
@@ -116,3 +117,15 @@ endif()
 if (GLYPH_RENDERER_BUILD_TESTS)
   add_subdirectory(tests)
 endif()
+
+install(TARGETS GlyphRenderer EXPORT GlyphRendererTargets
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+install(DIRECTORY include/ DESTINATION include)
+install(EXPORT GlyphRendererTargets
+  FILE GlyphRendererTargets.cmake
+  NAMESPACE GlyphRenderer::
+  DESTINATION lib/cmake/GlyphRenderer
+)

@@ -39,6 +39,7 @@ add_glyphrenderer_test(
   TextSystemFacadeTest.cpp
 )
 add_glyphrenderer_test(GlyphRendererTestBakedAtlasApi BakedAtlasApiTest.cpp)
+add_glyphrenderer_test(DokuTextTestCompile DokuTextCompileTest.cpp)
 
 target_include_directories(
   GlyphRendererTestVisualPng PRIVATE ${CMAKE_SOURCE_DIR}/src

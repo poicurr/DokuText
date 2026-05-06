@@ -27,3 +27,4 @@ add_glyphrenderer_example(
   GlyphRendererExampleStaticAtlas
   StaticAtlasEmbedding.cpp
 )
+add_glyphrenderer_example(DokuTextExampleEmbedding DokuTextEmbedding.cpp)
