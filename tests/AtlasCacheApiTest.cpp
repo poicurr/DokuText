@@ -1,12 +1,12 @@
-#include "GlyphRenderer/GlyphRenderer.hpp"
+#include <DokuText/DokuText.hpp>
 
 #include <iostream>
 
 int main() {
   std::cout << "[test] atlas cache api\n";
 
-  glyphrenderer::GlyphRendererContext context;
-  glyphrenderer::FontFallbackChain chain;
+  doku::text::DokuTextContext context;
+  doku::text::FontFallbackChain chain;
   chain.textFonts = {
       "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf",
   };
@@ -16,43 +16,43 @@ int main() {
   chain.symbolFonts = {
       "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf",
   };
-  const glyphrenderer::FontChainId fontChainId =
+  const doku::text::FontChainId fontChainId =
       context.registerFontFallbackChain(chain);
 
-  glyphrenderer::GlyphRenderer renderer(context);
-  glyphrenderer::TextLayoutContext layoutContext;
+  doku::text::DokuText renderer(context);
+  doku::text::TextLayoutContext layoutContext;
   layoutContext.fontChainId = fontChainId;
   layoutContext.pixelSize = 96;
   layoutContext.paragraphOptions.wrappingWidth = 256;
   layoutContext.paragraphOptions.horizontalAlign =
-      glyphrenderer::HorizontalAlign::Center;
+      doku::text::HorizontalAlign::Center;
 
-  const glyphrenderer::TextLineLayout layout =
+  const doku::text::TextLineLayout layout =
       renderer.layoutLine(layoutContext, "Aあ🍣");
 
-  glyphrenderer::AtlasBuildContext atlasContext;
+  doku::text::AtlasBuildContext atlasContext;
   atlasContext.pageWidth = 256;
   atlasContext.pageHeight = 256;
   atlasContext.padding = 2;
-  glyphrenderer::GlyphAtlasCache cache(atlasContext);
+  doku::text::GlyphAtlasCache cache(atlasContext);
 
-  const glyphrenderer::GlyphAtlasCacheUpdate firstUpdate =
+  const doku::text::GlyphAtlasCacheUpdate firstUpdate =
       cache.ensureGlyphs(layout);
-  const std::vector<glyphrenderer::AtlasPageUploadPlan> firstUploadPlan =
-      glyphrenderer::buildAtlasPageUploadPlan(cache, firstUpdate);
-  const glyphrenderer::GlyphAtlasCacheUpdate secondUpdate =
+  const std::vector<doku::text::AtlasPageUploadPlan> firstUploadPlan =
+      doku::text::buildAtlasPageUploadPlan(cache, firstUpdate);
+  const doku::text::GlyphAtlasCacheUpdate secondUpdate =
       cache.ensureGlyphs(layout);
-  const std::vector<glyphrenderer::AtlasPageUploadPlan> secondUploadPlan =
-      glyphrenderer::buildAtlasPageUploadPlan(cache, secondUpdate);
-  const glyphrenderer::TextDrawRun drawRun =
+  const std::vector<doku::text::AtlasPageUploadPlan> secondUploadPlan =
+      doku::text::buildAtlasPageUploadPlan(cache, secondUpdate);
+  const doku::text::TextDrawRun drawRun =
       renderer.buildDrawRun(layout, cache);
-  const glyphrenderer::GlyphHandle firstHandle =
-      drawRun.glyphs.empty() ? glyphrenderer::GlyphHandle{}
+  const doku::text::GlyphHandle firstHandle =
+      drawRun.glyphs.empty() ? doku::text::GlyphHandle{}
                              : drawRun.glyphs.front().handle;
-  const glyphrenderer::GlyphAtlasCacheUpdate evictUpdate =
-      firstHandle.value == 0 ? glyphrenderer::GlyphAtlasCacheUpdate{}
+  const doku::text::GlyphAtlasCacheUpdate evictUpdate =
+      firstHandle.value == 0 ? doku::text::GlyphAtlasCacheUpdate{}
                              : cache.evict({firstHandle});
-  const glyphrenderer::GlyphAtlasCacheUpdate compactUpdate = cache.compact();
+  const doku::text::GlyphAtlasCacheUpdate compactUpdate = cache.compact();
 
   std::cout << "first.newPages=" << firstUpdate.newPages.size()
             << " first.updatedEntries=" << firstUpdate.updatedEntries.size()
@@ -69,11 +69,11 @@ int main() {
             << " compact.entries=" << compactUpdate.updatedEntries.size()
             << '\n';
   if (!drawRun.glyphs.empty()) {
-    const glyphrenderer::PositionedGlyph &glyph = drawRun.glyphs.front();
+    const doku::text::PositionedGlyph &glyph = drawRun.glyphs.front();
     std::cout << "first.page=" << glyph.atlasPage
               << " pageHandle=" << glyph.atlasPageHandle.value
-              << " material=" << glyphrenderer::toString(glyph.materialKind)
-              << " blend=" << glyphrenderer::toString(glyph.blendHint) << '\n';
+              << " material=" << doku::text::toString(glyph.materialKind)
+              << " blend=" << doku::text::toString(glyph.blendHint) << '\n';
   }
   return firstUpdate.updatedEntries.empty() || firstUploadPlan.empty() ? 1 : 0;
 }

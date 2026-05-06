@@ -1,4 +1,4 @@
-#include "GlyphRenderer/GlyphRenderer.hpp"
+#include <DokuText/DokuText.hpp>
 
 #include <iostream>
 #include <string>
@@ -15,5 +15,5 @@ int main() {
   };
 
   std::cout << "[example] runCli metrics and trace logging\n";
-  return glyphrenderer::runCli(args);
+  return doku::text::runCli(args);
 }

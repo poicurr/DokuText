@@ -1,4 +1,4 @@
-#include "GlyphRenderer/GlyphRenderer.hpp"
+#include <DokuText/DokuText.hpp>
 
 #include <iostream>
 #include <string>
@@ -19,5 +19,5 @@ int main() {
       "5",
       "fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf",
   };
-  return glyphrenderer::runCli(args);
+  return doku::text::runCli(args);
 }

@@ -1,12 +1,12 @@
-#include "GlyphRenderer/GlyphRenderer.hpp"
+#include <DokuText/DokuText.hpp>
 
 #include <iostream>
 
 int main() {
   std::cout << "[test] multi-line text api\n";
 
-  glyphrenderer::GlyphRendererContext context;
-  glyphrenderer::FontFallbackChain chain;
+  doku::text::DokuTextContext context;
+  doku::text::FontFallbackChain chain;
   chain.textFonts = {
       "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf",
   };
@@ -17,28 +17,28 @@ int main() {
   chain.symbolFonts = {
       "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf",
   };
-  const glyphrenderer::FontChainId fontChainId =
+  const doku::text::FontChainId fontChainId =
       context.registerFontFallbackChain(chain);
-  glyphrenderer::GlyphRenderer renderer(context);
+  doku::text::DokuText renderer(context);
 
-  glyphrenderer::AtlasBuildContext atlasContext;
+  doku::text::AtlasBuildContext atlasContext;
   atlasContext.pageWidth = 512;
   atlasContext.pageHeight = 512;
   atlasContext.padding = 2;
-  glyphrenderer::GlyphAtlasCache atlasCache(atlasContext);
+  doku::text::GlyphAtlasCache atlasCache(atlasContext);
 
   const std::string text = "Aあ🍣\n🙂";
-  glyphrenderer::TextRequest request;
+  doku::text::TextRequest request;
   request.text = text;
   request.fontChainId = fontChainId;
   request.pixelSize = 96;
   request.layoutOptions.wrappingWidth = 220;
   request.layoutOptions.horizontalAlign =
-      glyphrenderer::HorizontalAlign::Center;
+      doku::text::HorizontalAlign::Center;
   request.layoutOptions.lineSpacingMultiplier = 1.2F;
 
-  const glyphrenderer::MultiLineLayout layout = renderer.layoutText(request);
-  const glyphrenderer::MultiLineDrawRun draw =
+  const doku::text::MultiLineLayout layout = renderer.layoutText(request);
+  const doku::text::MultiLineDrawRun draw =
       renderer.prepareText(request, atlasCache);
 
   std::cout << "lines=" << layout.lines.size()
@@ -75,7 +75,7 @@ int main() {
   if (!draw.diagnostics.empty()) {
     std::cout << "paragraphFirstDiagnosticLine="
               << draw.diagnostics.front().lineIndex << " code="
-              << glyphrenderer::toString(
+              << doku::text::toString(
                      draw.diagnostics.front().code)
               << '\n';
   }

@@ -4,7 +4,7 @@
 
 **DokuText** is a text backend for DokuEngine and other embeddable applications. It handles font fallback, UTF-8 text shaping, paragraph layout, COLRv0/COLRv1 color glyph rasterization, glyph atlas management, draw-ready text submissions, upload plans, and diagnostics.
 
-> **Note on Naming**: *GlyphRenderer* was the original project name when the repository primarily focused on COLRv0/COLRv1 glyph rendering and PNG export. The repository is now **DokuText** because the library has grown into a comprehensive text shaping, layout, atlas, and renderer-integration backend. "GlyphRenderer" is still used in some legacy namespaces and CMake targets during the migration period.
+Historical Note: This project was formerly known as *GlyphRenderer*.
 
 ---
 
@@ -46,7 +46,7 @@ The `app` CLI tool allows for quick verification of glyph rendering and font sca
 ./build/app --scan-colrv1 fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf
 ```
 
-Refer to the CLI help or the legacy documentation for advanced scanning and verification options.
+Refer to the CLI help or the documentation for advanced scanning and verification options.
 
 ---
 
@@ -84,53 +84,19 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(DokuText)
 
-# Current compatibility targets:
-target_link_libraries(your_target PRIVATE GlyphRenderer::GlyphRenderer)
-
-# Current migration alias API:
-# target_link_libraries(your_target PRIVATE DokuText::DokuText)
-
-# Planned final target name:
-# DokuText::DokuText
+target_link_libraries(your_target PRIVATE DokuText::DokuText)
 ```
 
-Public header: `#include <GlyphRenderer/GlyphRenderer.hpp>` (Legacy path)
-Migration header: `#include <DokuText/DokuText.hpp>` (Available now)
-
-## Current / Migration / Planned API Names
-
-Current stable API:
-
-    #include <GlyphRenderer/GlyphRenderer.hpp>
-    glyphrenderer::TextSystem textSystem;
-
-Current CMake target:
-
-    target_link_libraries(your_target PRIVATE GlyphRenderer::GlyphRenderer)
-
-Current migration alias API:
-
-    #include <DokuText/DokuText.hpp>
-    doku::text::TextSystem textSystem;
-
-Planned final API:
-
-    #include <DokuText/DokuText.hpp>
-    doku::text::TextSystem textSystem;
-
-Planned final CMake target:
-
-    target_link_libraries(your_target PRIVATE DokuText::DokuText)
-
-`DokuText::DokuText` is planned and must not be documented as current unless the target actually exists.
+Public header: `#include <DokuText/DokuText.hpp>`
+Namespace: `doku::text`
+CMake target: `DokuText::DokuText`
 
 ## High-Level Facade
 
 DokuText provides `TextSystem` and `TextAtlas` as a high-level API.
 
 ```cpp
-// Current compatibility namespace: glyphrenderer::
-// Migration namespace: doku::text:: (Available now)
+#include <DokuText/DokuText.hpp>
 
 doku::text::TextSystem textSystem;
 
@@ -160,15 +126,15 @@ doku::text::PreparedTextParagraph paragraph = textSystem.prepareText(atlas, "Hel
 For UI use cases where you want an immutable atlas built at startup.
 
 ```cpp
-glyphrenderer::TextAtlasBakeRequest bakeRequest;
+doku::text::TextAtlasBakeRequest bakeRequest;
 bakeRequest.fontChainId = fontChainId;
 bakeRequest.pixelSize = 96;
-bakeRequest.seedPresets = { glyphrenderer::TextSeedPreset::Ascii, glyphrenderer::TextSeedPreset::Japanese };
+bakeRequest.seedPresets = { doku::text::TextSeedPreset::Ascii, doku::text::TextSeedPreset::Japanese };
 
-glyphrenderer::BakedTextAtlas bakedAtlas = textSystem.bakeTextAtlas(bakeRequest);
+doku::text::BakedTextAtlas bakedAtlas = textSystem.bakeTextAtlas(bakeRequest);
 
 // Layout without mutating the atlas
-glyphrenderer::PreparedTextParagraph prepared = textSystem.layoutTextParagraph(bakedAtlas, request);
+doku::text::PreparedTextParagraph prepared = textSystem.layoutTextParagraph(bakedAtlas, request);
 ```
 
 ## Renderer Contract

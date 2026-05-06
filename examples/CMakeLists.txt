@@ -1,6 +1,6 @@
-function(add_glyphrenderer_example target_name source_file)
+function(add_dokutext_example target_name source_file)
   add_executable(${target_name} ${source_file})
-  target_link_libraries(${target_name} PRIVATE GlyphRenderer::GlyphRenderer)
+  target_link_libraries(${target_name} PRIVATE DokuText::DokuText)
   target_compile_features(${target_name} PRIVATE cxx_std_20)
 
   if(WIN32)
@@ -10,21 +10,21 @@ function(add_glyphrenderer_example target_name source_file)
   endif()
 endfunction()
 
-add_glyphrenderer_example(GlyphRendererExampleBasic BasicEmbedding.cpp)
-add_glyphrenderer_example(
-  GlyphRendererExampleMetricsLog
+add_dokutext_example(DokuTextExampleBasic BasicEmbedding.cpp)
+add_dokutext_example(
+  DokuTextExampleMetricsLog
   MetricsLogEmbedding.cpp
 )
-add_glyphrenderer_example(
-  GlyphRendererExampleEngineSession
+add_dokutext_example(
+  DokuTextExampleEngineSession
   EngineSessionEmbedding.cpp
 )
-add_glyphrenderer_example(
-  GlyphRendererExampleRendererContract
+add_dokutext_example(
+  DokuTextExampleRendererContract
   RendererIntegrationContract.cpp
 )
-add_glyphrenderer_example(
-  GlyphRendererExampleStaticAtlas
+add_dokutext_example(
+  DokuTextExampleStaticAtlas
   StaticAtlasEmbedding.cpp
 )
-add_glyphrenderer_example(DokuTextExampleEmbedding DokuTextEmbedding.cpp)
+add_dokutext_example(DokuTextExampleEmbedding DokuTextEmbedding.cpp)

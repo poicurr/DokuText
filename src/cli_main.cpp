@@ -1,3 +1,3 @@
-#include "GlyphRenderer/GlyphRenderer.hpp"
+#include <DokuText/DokuText.hpp>
 
-int main(int argc, char *argv[]) { return glyphrenderer::runCli(argc, argv); }
+int main(int argc, char *argv[]) { return doku::text::runCli(argc, argv); }

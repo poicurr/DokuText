@@ -1,6 +1,6 @@
 # FetchContentConsumer
 
-外部プロジェクト側から `FetchContent` で `GlyphRenderer` を取り込む最小例です。
+外部プロジェクト側から `FetchContent` で `DokuText` を取り込む最小例です。
 
 Windows + vcpkg の例:
 
@@ -16,5 +16,5 @@ cmake --build build
 - atlas seed
 - `prepareLine(...)`
 
-までを最小構成で呼びます。`GlyphRendererContext` / `GlyphRenderer` /
+までを最小構成で呼びます。`DokuTextContext` / `DokuText` /
 `TextLayoutContext` は、より低レベルな制御が必要な場合だけ直接使う想定です。

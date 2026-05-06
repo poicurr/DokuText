@@ -3,18 +3,14 @@
 ## 1. Purpose
 DokuText is a comprehensive text shaping, layout, and atlas management backend for DokuEngine and other embeddable applications. It provides a bridge between raw font files and renderer-agnostic draw submissions.
 
+Historical Note: This project was formerly known as *GlyphRenderer*.
+
 ## 2. Naming
 
 - **DokuText**: The formal repository and subsystem name.
-- **GlyphRenderer**: The legacy project name. It remains visible in current code as the CMake project name, CMake target, include path, namespace, and low-level class name during migration.
-- **glyphrenderer**: The current C++ namespace.
-- **doku::text**: The migration alias namespace provided by `<DokuText/DokuText.hpp>`.
-- **GlyphRenderer::GlyphRenderer**: The current compatibility CMake target.
-- **DokuText::DokuText**: Planned CMake target for a later physical migration phase.
-
-Current stable usage remains `GlyphRenderer::GlyphRenderer` and `glyphrenderer::`.
-
-The alias header is migration support, not a completed physical namespace/target rename.
+- **doku::text**: The current C++ namespace.
+- **DokuText::DokuText**: The current CMake target.
+- **<DokuText/DokuText.hpp>**: The primary public include path.
 
 ## 3. Responsibilities
 DokuText is responsible for:
@@ -46,7 +42,7 @@ DokuText does **NOT** handle:
 ## 5. Public API Layers
 - **High-Level Facade (`TextSystem`)**: Recommended for common use cases. Handles `TextAtlas` management and provides `prepareLine`/`prepareText` APIs.
 - **Atlas Layer (`TextAtlas` / `BakedTextAtlas`)**: Manages the lifecycle of glyph images and UV mapping.
-- **Low-Level Core (`GlyphRenderer`)**: Provides direct access to shaping, rasterization, and layout stages.
+- **Low-Level Core (`DokuText`)**: Provides direct access to shaping, rasterization, and layout stages.
 
 ## 6. Atlas Models
 
@@ -195,29 +191,22 @@ Missing glyph states must not be permanently cached because fallback chains, fon
 ## 11. Migration Plan
 
 - **Phase A: Documentation & Naming**
-  - Repository rename to DokuText.
-  - README / ROADMAP / contract alignment.
-  - Initial `<DokuText/DokuText.hpp>` migration alias header.
+  - Repository name DokuText.
+  - text backend contract.
+  - renderer contract.
 
-- **Phase B: Compatibility Alias Stabilization**
-  - Expand and test `doku::text` namespace aliases.
-  - Maintain `glyphrenderer` namespace.
-  - Maintain `GlyphRenderer::GlyphRenderer` CMake target.
-  - Do not perform physical namespace or target rename.
+- **Phase B: Clean DokuText API Migration**
+  - public header <DokuText/DokuText.hpp>.
+  - namespace doku::text.
+  - CMake target DokuText::DokuText.
+  - examples/tests updated to DokuText API.
 
 - **Phase C: DokuEngine Adapter**
-  - Add UiFontAtlas adapter boundary.
-  - Convert DokuText atlas/draw data into DokuEngine core/ir types.
-  - Bridge text cache invalidation policy.
+  - UiFontAtlas adapter.
+  - atlas metadata bridge.
+  - text cache invalidation bridge.
 
 - **Phase D: Budgeted Dynamic Atlas Integration**
-  - Add pending missing glyph queue.
-  - Add max glyphs per frame budget.
-  - Add dirty rect texture upload integration.
-  - Avoid large synchronous runtime glyph rasterization spikes.
-
-- **Phase E: Physical Rename**
-  - Migrate physical namespace to `doku::text`.
-  - Add or switch to `DokuText::DokuText`.
-  - Migrate include paths.
-  - Decide legacy compatibility removal policy.
+  - pending missing glyph queue.
+  - max glyphs per frame.
+  - dirty rect GPU updates.

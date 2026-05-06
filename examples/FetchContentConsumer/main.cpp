@@ -1,11 +1,11 @@
-#include "GlyphRenderer/GlyphRenderer.hpp"
+#include <DokuText/DokuText.hpp>
 
 #include <iostream>
 
 int main() {
-  glyphrenderer::TextSystem textSystem;
+  doku::text::TextSystem textSystem;
 
-  glyphrenderer::FontFallbackChain chain;
+  doku::text::FontFallbackChain chain;
   chain.textFonts = {
       "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf",
   };
@@ -13,20 +13,20 @@ int main() {
       "fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf",
   };
 
-  const glyphrenderer::FontChainId fontChainId =
+  const doku::text::FontChainId fontChainId =
       textSystem.registerFontFallbackChain(chain);
 
-  glyphrenderer::TextAtlasOptions atlasOptions;
+  doku::text::TextAtlasOptions atlasOptions;
   atlasOptions.fontChainId = fontChainId;
   atlasOptions.pixelSize = 128;
-  glyphrenderer::TextAtlas atlas = textSystem.createAtlas(atlasOptions);
+  doku::text::TextAtlas atlas = textSystem.createAtlas(atlasOptions);
 
-  glyphrenderer::TextSeedRequest seedRequest;
+  doku::text::TextSeedRequest seedRequest;
   seedRequest.texts = {"A🍣"};
-  const glyphrenderer::TextAtlasSeedResult seedResult =
+  const doku::text::TextAtlasSeedResult seedResult =
       textSystem.seedAtlas(atlas, seedRequest);
 
-  const glyphrenderer::PreparedTextLine prepared =
+  const doku::text::PreparedTextLine prepared =
       textSystem.prepareLine(atlas, "A🍣");
 
   std::cout << "seedPages=" << atlas.pages().size()

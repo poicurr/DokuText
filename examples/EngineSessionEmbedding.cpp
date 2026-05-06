@@ -1,10 +1,10 @@
-#include "GlyphRenderer/GlyphRenderer.hpp"
+#include <DokuText/DokuText.hpp>
 
 #include <iostream>
 
 int main() {
-  glyphrenderer::GlyphRendererContext context;
-  glyphrenderer::FontFallbackChain registeredChain;
+  doku::text::DokuTextContext context;
+  doku::text::FontFallbackChain registeredChain;
   registeredChain.textFonts = {
       "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf",
   };
@@ -14,76 +14,76 @@ int main() {
   registeredChain.symbolFonts = {
       "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf",
   };
-  const glyphrenderer::FontChainId fontChainId =
+  const doku::text::FontChainId fontChainId =
       context.registerFontFallbackChain(registeredChain);
-  glyphrenderer::GlyphRenderer renderer(context);
+  doku::text::DokuText renderer(context);
 
-  glyphrenderer::TextLayoutContext layoutContext;
+  doku::text::TextLayoutContext layoutContext;
   layoutContext.fontChainId = fontChainId;
   layoutContext.pixelSize = 96;
   layoutContext.verifyMetrics = true;
   layoutContext.paragraphOptions.wrappingWidth = 512;
   layoutContext.paragraphOptions.horizontalAlign =
-      glyphrenderer::HorizontalAlign::Center;
+      doku::text::HorizontalAlign::Center;
   layoutContext.paragraphOptions.lineSpacingMultiplier = 1.1F;
 
   const std::string text = "Aあ\n🍣";
-  const glyphrenderer::TextShapeResult shape =
+  const doku::text::TextShapeResult shape =
       renderer.shapeLine(layoutContext, "Aあ🍣");
-  const glyphrenderer::TextRasterResult raster =
+  const doku::text::TextRasterResult raster =
       renderer.rasterizeLine(layoutContext, shape);
-  const glyphrenderer::TextLineLayout layout = renderer.layoutLine(raster);
-  const glyphrenderer::MultiLineLayout multiLine =
+  const doku::text::TextLineLayout layout = renderer.layoutLine(raster);
+  const doku::text::MultiLineLayout multiLine =
       renderer.layoutText(layoutContext, text);
-  const glyphrenderer::MultiLineShapeResult multiShape =
+  const doku::text::MultiLineShapeResult multiShape =
       renderer.shapeText(layoutContext, text);
-  const glyphrenderer::MultiLineRasterResult multiRaster =
+  const doku::text::MultiLineRasterResult multiRaster =
       renderer.rasterizeText(layoutContext, multiShape);
 
-  glyphrenderer::AtlasBuildContext atlasContext;
+  doku::text::AtlasBuildContext atlasContext;
   atlasContext.pageWidth = 512;
   atlasContext.pageHeight = 512;
   atlasContext.padding = 2;
-  glyphrenderer::GlyphAtlasCache atlasCache(atlasContext);
-  const glyphrenderer::AtlasBuildResult atlas =
+  doku::text::GlyphAtlasCache atlasCache(atlasContext);
+  const doku::text::AtlasBuildResult atlas =
       renderer.buildAtlas(layout, atlasContext);
-  const glyphrenderer::TextDrawRun drawRun =
+  const doku::text::TextDrawRun drawRun =
       renderer.buildDrawRun(layout, atlas);
-  const glyphrenderer::GlyphAtlasCacheUpdate atlasUpdate =
+  const doku::text::GlyphAtlasCacheUpdate atlasUpdate =
       atlasCache.ensureGlyphs(layout);
-  const std::vector<glyphrenderer::AtlasPageUploadPlan> atlasUploadPlan =
-      glyphrenderer::buildAtlasPageUploadPlan(atlasCache, atlasUpdate);
-  const glyphrenderer::TextDrawRun cachedDrawRun =
+  const std::vector<doku::text::AtlasPageUploadPlan> atlasUploadPlan =
+      doku::text::buildAtlasPageUploadPlan(atlasCache, atlasUpdate);
+  const doku::text::TextDrawRun cachedDrawRun =
       renderer.buildDrawRun(layout, atlasCache);
-  const glyphrenderer::MultiLineDrawRun multiDraw =
+  const doku::text::MultiLineDrawRun multiDraw =
       renderer.buildDrawText(layoutContext, text, atlasContext);
-  const glyphrenderer::MultiLineDrawRun cachedMultiDraw =
+  const doku::text::MultiLineDrawRun cachedMultiDraw =
       renderer.buildDrawText(multiLine, atlasCache);
-  const glyphrenderer::TextCompatibilityReport layoutCompatibility =
-      glyphrenderer::analyzeTextCompatibility(layout);
-  const glyphrenderer::TextCompatibilityReport compatibility =
-      glyphrenderer::analyzeTextCompatibility(cachedDrawRun);
-  glyphrenderer::CompatibilityConstraints alphaOnlyConstraints;
+  const doku::text::TextCompatibilityReport layoutCompatibility =
+      doku::text::analyzeTextCompatibility(layout);
+  const doku::text::TextCompatibilityReport compatibility =
+      doku::text::analyzeTextCompatibility(cachedDrawRun);
+  doku::text::CompatibilityConstraints alphaOnlyConstraints;
   alphaOnlyConstraints.allowColorGlyphs = false;
   alphaOnlyConstraints.allowMultiplePages = false;
   alphaOnlyConstraints.maxPages = 1;
-  const glyphrenderer::TextCompatibilityReport constrainedCompatibility =
-      glyphrenderer::analyzeTextCompatibility(cachedDrawRun,
+  const doku::text::TextCompatibilityReport constrainedCompatibility =
+      doku::text::analyzeTextCompatibility(cachedDrawRun,
                                               alphaOnlyConstraints);
-  const glyphrenderer::TextDrawSubmission submission =
-      glyphrenderer::buildTextDrawSubmission(cachedMultiDraw);
+  const doku::text::TextDrawSubmission submission =
+      doku::text::buildTextDrawSubmission(cachedMultiDraw);
 
   std::cout << "[example] engine session pipeline\n";
   std::cout << "shape.clusters=" << shape.clusters.size()
             << " diagnostics=" << shape.diagnostics.size()
             << " fallbackCount=" << shape.summary.fallbackCount << '\n';
   for (std::size_t i = 0; i < shape.clusters.size(); ++i) {
-    const glyphrenderer::ShapedCluster &cluster = shape.clusters[i];
+    const doku::text::ShapedCluster &cluster = shape.clusters[i];
     std::cout << "  cluster[" << i << "] glyphs=" << cluster.glyphs.size()
               << " fallback=" << cluster.fallbackApplied
               << " font=" << cluster.fontPath << '\n';
   }
-  for (const glyphrenderer::FallbackTraceEntry &entry : shape.fallbackTrace) {
+  for (const doku::text::FallbackTraceEntry &entry : shape.fallbackTrace) {
     std::cout << "  trace cluster=" << entry.clusterIndex
               << " text=" << entry.clusterText
               << " attempted=" << entry.attemptedFonts.size()
@@ -98,7 +98,7 @@ int main() {
             << " raster.diagnostics=" << raster.diagnostics.size()
             << " usedFonts=" << raster.summary.usedFonts.size() << '\n';
   if (!layout.glyphs.empty()) {
-    const glyphrenderer::PositionedGlyph &glyph = layout.glyphs.front();
+    const doku::text::PositionedGlyph &glyph = layout.glyphs.front();
     std::cout << "first.layout handle=" << glyph.handle.value
               << " glyphId=" << glyph.glyphId
               << " clusterIndex=" << glyph.clusterIndex << '\n';
@@ -107,7 +107,7 @@ int main() {
             << " atlas.entries=" << atlas.entries.size()
             << " atlas.diagnostics=" << atlas.diagnostics.size() << '\n';
   if (!atlas.entries.empty()) {
-    const glyphrenderer::GlyphAtlasEntry &entry = atlas.entries.front();
+    const doku::text::GlyphAtlasEntry &entry = atlas.entries.front();
     std::cout << "first.atlas handle=" << entry.handle.value
               << " page=" << entry.pageIndex << " uv=(" << entry.uvRect.minX
               << "," << entry.uvRect.minY << ")-(" << entry.uvRect.maxX << ","
@@ -123,16 +123,16 @@ int main() {
             << " cachePages=" << atlasCache.pages().size()
             << " uploadPlans=" << atlasUploadPlan.size() << '\n';
   if (!drawRun.glyphs.empty()) {
-    const glyphrenderer::PositionedGlyph &glyph = drawRun.glyphs.front();
+    const doku::text::PositionedGlyph &glyph = drawRun.glyphs.front();
     std::cout << "first.draw page=" << glyph.atlasPage << " uv=("
               << glyph.uvRect.minX << "," << glyph.uvRect.minY << ")-("
               << glyph.uvRect.maxX << "," << glyph.uvRect.maxY << ")\n";
   }
   if (!cachedDrawRun.glyphs.empty()) {
-    const glyphrenderer::PositionedGlyph &glyph = cachedDrawRun.glyphs.front();
+    const doku::text::PositionedGlyph &glyph = cachedDrawRun.glyphs.front();
     std::cout << "first.cached pageHandle=" << glyph.atlasPageHandle.value
-              << " material=" << glyphrenderer::toString(glyph.materialKind)
-              << " blend=" << glyphrenderer::toString(glyph.blendHint) << '\n';
+              << " material=" << doku::text::toString(glyph.materialKind)
+              << " blend=" << doku::text::toString(glyph.blendHint) << '\n';
   }
   std::cout << "layoutCompatibility alphaOnly="
             << layoutCompatibility.alphaOnlyCompatible
@@ -161,14 +161,14 @@ int main() {
             << " multi.lineTexts=" << multiDraw.lineTexts.size()
             << " cachedMultiDraw=" << cachedMultiDraw.glyphs.size() << '\n';
   if (multiDraw.lines.size() >= 2 && !multiDraw.lines[1].glyphs.empty()) {
-    const glyphrenderer::PositionedGlyph &glyph =
+    const doku::text::PositionedGlyph &glyph =
         multiDraw.lines[1].glyphs.front();
     std::cout << "multi.second lineIndex=" << glyph.lineIndex
               << " originY=" << glyph.originY << '\n';
   }
   if (!multiDraw.fallbackTrace.empty()) {
     std::cout << "multi.first traceRole="
-              << glyphrenderer::toString(
+              << doku::text::toString(
                      multiDraw.fallbackTrace.front().requestedRole)
               << " lineIndex=" << multiDraw.fallbackTrace.front().lineIndex
               << '\n';

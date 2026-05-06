@@ -1,12 +1,12 @@
-#include "GlyphRenderer/GlyphRenderer.hpp"
+#include <DokuText/DokuText.hpp>
 
 #include <iostream>
 #include <stdexcept>
 
 int main() {
-  glyphrenderer::GlyphRendererContext context;
-  glyphrenderer::GlyphRenderer renderer(context);
-  glyphrenderer::TextLayoutContext layoutContext;
+  doku::text::DokuTextContext context;
+  doku::text::DokuText renderer(context);
+  doku::text::TextLayoutContext layoutContext;
 
   try {
     renderer.shapeLine(layoutContext, "Hello");
@@ -16,7 +16,7 @@ int main() {
     std::cout << "Caught expected exception: " << e.what() << '\n';
   }
 
-  glyphrenderer::TextRequest request;
+  doku::text::TextRequest request;
   request.text = "Hello";
 
   try {
