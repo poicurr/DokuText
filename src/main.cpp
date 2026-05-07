@@ -2455,9 +2455,72 @@ public:
     return &it->second;
   }
 
+  [[nodiscard]] TextAtlasPageInfo pageInfo(std::size_t pageIndex) const {
+    if (pageIndex >= m_pages.size()) {
+      throw std::out_of_range("pageIndex が範囲外です");
+    }
+    TextAtlasPageInfo info;
+    info.page = m_pages[pageIndex].handle;
+    info.pageIndex = static_cast<std::uint32_t>(pageIndex);
+    info.materialKind = m_pageMaterialKinds[pageIndex];
+    info.pixelFormat = atlasPixelFormatForMaterial(info.materialKind);
+    info.samplerKind = SamplerKind::LinearClamp;
+    return info;
+  }
+
+  [[nodiscard]] TextAtlasPageInfo
+  pageInfo(GlyphAtlasPageHandle pageHandle) const {
+    for (std::size_t i = 0; i < m_pages.size(); ++i) {
+      if (m_pages[i].handle.value == pageHandle.value) {
+        return pageInfo(i);
+      }
+    }
+    throw std::out_of_range("invalid GlyphAtlasPageHandle");
+  }
+
+  [[nodiscard]] MaterialKind
+  materialKindForPage(std::size_t pageIndex) const {
+    if (pageIndex >= m_pageMaterialKinds.size()) {
+      throw std::out_of_range("pageIndex が範囲外です");
+    }
+    return m_pageMaterialKinds[pageIndex];
+  }
+
+  [[nodiscard]] MaterialKind
+  materialKindForPage(GlyphAtlasPageHandle pageHandle) const {
+    return pageInfo(pageHandle).materialKind;
+  }
+
+  [[nodiscard]] AtlasPixelFormat
+  pixelFormatForPage(std::size_t pageIndex) const {
+    return atlasPixelFormatForMaterial(materialKindForPage(pageIndex));
+  }
+
+  [[nodiscard]] AtlasPixelFormat
+  pixelFormatForPage(GlyphAtlasPageHandle pageHandle) const {
+    return atlasPixelFormatForMaterial(materialKindForPage(pageHandle));
+  }
+
+  [[nodiscard]] SamplerKind
+  samplerKindForPage(std::size_t /* pageIndex */) const {
+    return SamplerKind::LinearClamp;
+  }
+
+  [[nodiscard]] SamplerKind
+  samplerKindForPage(GlyphAtlasPageHandle /* pageHandle */) const {
+    return SamplerKind::LinearClamp;
+  }
+
 private:
   struct CachedGlyph {
     PositionedGlyph glyph;
+  };
+
+  struct PackingState {
+    int currentPage = -1;
+    int penX = 0;
+    int penY = 0;
+    int rowHeight = 0;
   };
 
   void ensureGlyphsInternal(const std::vector<PositionedGlyph> &glyphs,
@@ -2486,20 +2549,22 @@ private:
         continue;
       }
 
-      if (m_pages.empty()) {
-        addPage(update);
+      PackingState &state = m_packingStates[glyph.materialKind];
+
+      if (state.currentPage == -1) {
+        addPage(update, glyph.materialKind);
       }
-      if (m_penX + image.width + m_context.padding > m_context.pageWidth) {
-        m_penX = m_context.padding;
-        m_penY += m_rowHeight + m_context.padding;
-        m_rowHeight = 0;
+      if (state.penX + image.width + m_context.padding > m_context.pageWidth) {
+        state.penX = m_context.padding;
+        state.penY += state.rowHeight + m_context.padding;
+        state.rowHeight = 0;
       }
-      if (m_penY + image.height + m_context.padding > m_context.pageHeight) {
-        addPage(update);
+      if (state.penY + image.height + m_context.padding > m_context.pageHeight) {
+        addPage(update, glyph.materialKind);
       }
 
-      GlyphAtlasPage &page = m_pages[m_currentPage];
-      blitBitmapImage(page.image, image, m_penX, m_penY);
+      GlyphAtlasPage &page = m_pages[state.currentPage];
+      blitBitmapImage(page.image, image, state.penX, state.penY);
 
       GlyphAtlasEntry entry;
       entry.handle = glyph.handle;
@@ -2508,10 +2573,10 @@ private:
       entry.clusterIndex = glyph.clusterIndex;
       entry.glyphIndexInCluster = glyph.glyphIndexInCluster;
       entry.glyphIndex = glyphIndex;
-      entry.pageIndex = m_currentPage;
+      entry.pageIndex = state.currentPage;
       entry.pageHandle = page.handle;
-      entry.pixelRect = {m_penX, m_penY, m_penX + image.width,
-                         m_penY + image.height};
+      entry.pixelRect = {state.penX, state.penY, state.penX + image.width,
+                         state.penY + image.height};
       entry.uvRect = toNormalizedUvRect(entry.pixelRect, m_context.pageWidth,
                                         m_context.pageHeight);
       entry.isColorGlyph = glyph.isColorGlyph;
@@ -2523,12 +2588,12 @@ private:
       update.updatedEntries.push_back(entry);
       update.dirtyRects.push_back({entry.pageHandle, entry.pixelRect});
 
-      m_penX += image.width + m_context.padding;
-      m_rowHeight = std::max(m_rowHeight, image.height);
+      state.penX += image.width + m_context.padding;
+      state.rowHeight = std::max(state.rowHeight, image.height);
     }
   }
 
-  void addPage(GlyphAtlasCacheUpdate &update) {
+  void addPage(GlyphAtlasCacheUpdate &update, MaterialKind materialKind) {
     GlyphAtlasPage page;
     page.handle =
         GlyphAtlasPageHandle{static_cast<std::uint32_t>(m_pages.size() + 1U)};
@@ -2539,20 +2604,21 @@ private:
                                4U,
                            0U);
     m_pages.push_back(page);
+    m_pageMaterialKinds.push_back(materialKind);
     update.newPages.push_back(page);
-    m_currentPage = static_cast<int>(m_pages.size() - 1);
-    m_penX = m_context.padding;
-    m_penY = m_context.padding;
-    m_rowHeight = 0;
+
+    PackingState &state = m_packingStates[materialKind];
+    state.currentPage = static_cast<int>(m_pages.size() - 1);
+    state.penX = m_context.padding;
+    state.penY = m_context.padding;
+    state.rowHeight = 0;
   }
 
   void resetPacking() {
     m_pages.clear();
+    m_pageMaterialKinds.clear();
     m_entriesByHandle.clear();
-    m_currentPage = -1;
-    m_penX = 0;
-    m_penY = 0;
-    m_rowHeight = 0;
+    m_packingStates.clear();
   }
 
   void repack(GlyphAtlasCacheUpdate &update) {
@@ -2600,12 +2666,10 @@ private:
 
   AtlasBuildContext m_context;
   std::vector<GlyphAtlasPage> m_pages;
+  std::vector<MaterialKind> m_pageMaterialKinds;
   std::unordered_map<std::uint64_t, GlyphAtlasEntry> m_entriesByHandle;
   std::unordered_map<std::uint64_t, CachedGlyph> m_glyphsByHandle;
-  int m_currentPage = -1;
-  int m_penX = 0;
-  int m_penY = 0;
-  int m_rowHeight = 0;
+  std::unordered_map<MaterialKind, PackingState> m_packingStates;
 };
 
 GlyphAtlasCache::GlyphAtlasCache(const AtlasBuildContext &context)
@@ -2645,6 +2709,45 @@ const std::vector<GlyphAtlasPage> &GlyphAtlasCache::pages() const {
 
 std::vector<GlyphAtlasEntry> GlyphAtlasCache::entries() const {
   return m_impl->entries();
+}
+
+TextAtlasPageInfo GlyphAtlasCache::pageInfo(std::size_t pageIndex) const {
+  return m_impl->pageInfo(pageIndex);
+}
+
+TextAtlasPageInfo
+GlyphAtlasCache::pageInfo(GlyphAtlasPageHandle pageHandle) const {
+  return m_impl->pageInfo(pageHandle);
+}
+
+MaterialKind
+GlyphAtlasCache::materialKindForPage(std::size_t pageIndex) const {
+  return m_impl->materialKindForPage(pageIndex);
+}
+
+MaterialKind
+GlyphAtlasCache::materialKindForPage(GlyphAtlasPageHandle pageHandle) const {
+  return m_impl->materialKindForPage(pageHandle);
+}
+
+AtlasPixelFormat
+GlyphAtlasCache::pixelFormatForPage(std::size_t pageIndex) const {
+  return m_impl->pixelFormatForPage(pageIndex);
+}
+
+AtlasPixelFormat
+GlyphAtlasCache::pixelFormatForPage(GlyphAtlasPageHandle pageHandle) const {
+  return m_impl->pixelFormatForPage(pageHandle);
+}
+
+SamplerKind
+GlyphAtlasCache::samplerKindForPage(std::size_t pageIndex) const {
+  return m_impl->samplerKindForPage(pageIndex);
+}
+
+SamplerKind
+GlyphAtlasCache::samplerKindForPage(GlyphAtlasPageHandle pageHandle) const {
+  return m_impl->samplerKindForPage(pageHandle);
 }
 
 DokuText::DokuText(DokuTextContext &context)
@@ -3683,6 +3786,43 @@ const std::vector<GlyphAtlasPage> &TextAtlas::pages() const {
 
 std::vector<GlyphAtlasEntry> TextAtlas::entries() const {
   return m_impl->m_cache.entries();
+}
+
+TextAtlasPageInfo TextAtlas::pageInfo(std::size_t pageIndex) const {
+  return m_impl->m_cache.pageInfo(pageIndex);
+}
+
+TextAtlasPageInfo
+TextAtlas::pageInfo(GlyphAtlasPageHandle pageHandle) const {
+  return m_impl->m_cache.pageInfo(pageHandle);
+}
+
+MaterialKind TextAtlas::materialKindForPage(std::size_t pageIndex) const {
+  return m_impl->m_cache.materialKindForPage(pageIndex);
+}
+
+MaterialKind
+TextAtlas::materialKindForPage(GlyphAtlasPageHandle pageHandle) const {
+  return m_impl->m_cache.materialKindForPage(pageHandle);
+}
+
+AtlasPixelFormat
+TextAtlas::pixelFormatForPage(std::size_t pageIndex) const {
+  return m_impl->m_cache.pixelFormatForPage(pageIndex);
+}
+
+AtlasPixelFormat
+TextAtlas::pixelFormatForPage(GlyphAtlasPageHandle pageHandle) const {
+  return m_impl->m_cache.pixelFormatForPage(pageHandle);
+}
+
+SamplerKind TextAtlas::samplerKindForPage(std::size_t pageIndex) const {
+  return m_impl->m_cache.samplerKindForPage(pageIndex);
+}
+
+SamplerKind
+TextAtlas::samplerKindForPage(GlyphAtlasPageHandle pageHandle) const {
+  return m_impl->m_cache.samplerKindForPage(pageHandle);
 }
 
 class BakedTextAtlas::Impl {

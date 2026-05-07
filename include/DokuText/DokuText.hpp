@@ -53,6 +53,7 @@ struct GlyphAtlasPageHandle {
   std::uint32_t value = 0;
 };
 
+
 // LineMetrics uses the same coordinate space as PositionedGlyph::originX/Y.
 // X grows to the right. Y grows downward.
 // baseline is the Y coordinate of the baseline within the line-local space.
@@ -225,6 +226,14 @@ enum class AtlasUvOrigin {
 
 enum class SamplerKind {
   LinearClamp,
+};
+
+struct TextAtlasPageInfo {
+  GlyphAtlasPageHandle page;
+  std::uint32_t pageIndex = 0;
+  MaterialKind materialKind = MaterialKind::AlphaMask;
+  AtlasPixelFormat pixelFormat = AtlasPixelFormat::AlphaMaskStraightRgba;
+  SamplerKind samplerKind = SamplerKind::LinearClamp;
 };
 
 [[nodiscard]] constexpr std::string_view toString(SamplerKind kind) {
@@ -761,6 +770,29 @@ public:
 
   [[nodiscard]] std::vector<GlyphAtlasEntry> entries() const;
 
+  [[nodiscard]] TextAtlasPageInfo pageInfo(std::size_t pageIndex) const;
+
+  [[nodiscard]] TextAtlasPageInfo
+  pageInfo(GlyphAtlasPageHandle pageHandle) const;
+
+  [[nodiscard]] MaterialKind
+  materialKindForPage(std::size_t pageIndex) const;
+
+  [[nodiscard]] MaterialKind
+  materialKindForPage(GlyphAtlasPageHandle pageHandle) const;
+
+  [[nodiscard]] AtlasPixelFormat
+  pixelFormatForPage(std::size_t pageIndex) const;
+
+  [[nodiscard]] AtlasPixelFormat
+  pixelFormatForPage(GlyphAtlasPageHandle pageHandle) const;
+
+  [[nodiscard]] SamplerKind
+  samplerKindForPage(std::size_t pageIndex) const;
+
+  [[nodiscard]] SamplerKind
+  samplerKindForPage(GlyphAtlasPageHandle pageHandle) const;
+
 private:
   class Impl;
   std::unique_ptr<Impl> m_impl;
@@ -920,6 +952,29 @@ public:
   [[nodiscard]] const std::vector<AtlasPageUploadPlan> &lastUploadPlan() const;
   [[nodiscard]] const std::vector<GlyphAtlasPage> &pages() const;
   [[nodiscard]] std::vector<GlyphAtlasEntry> entries() const;
+
+  [[nodiscard]] TextAtlasPageInfo pageInfo(std::size_t pageIndex) const;
+
+  [[nodiscard]] TextAtlasPageInfo
+  pageInfo(GlyphAtlasPageHandle pageHandle) const;
+
+  [[nodiscard]] MaterialKind
+  materialKindForPage(std::size_t pageIndex) const;
+
+  [[nodiscard]] MaterialKind
+  materialKindForPage(GlyphAtlasPageHandle pageHandle) const;
+
+  [[nodiscard]] AtlasPixelFormat
+  pixelFormatForPage(std::size_t pageIndex) const;
+
+  [[nodiscard]] AtlasPixelFormat
+  pixelFormatForPage(GlyphAtlasPageHandle pageHandle) const;
+
+  [[nodiscard]] SamplerKind
+  samplerKindForPage(std::size_t pageIndex) const;
+
+  [[nodiscard]] SamplerKind
+  samplerKindForPage(GlyphAtlasPageHandle pageHandle) const;
 
 private:
   class Impl;
