@@ -861,6 +861,13 @@ struct TextAtlasSeedResult {
   std::vector<AtlasPageUploadPlan> atlasUploadPlan;
   TextCompatibilityReport compatibility;
   std::vector<Diagnostic> diagnostics;
+
+  std::size_t requestedCodepointCount = 0;
+  std::size_t resolvedGlyphCount = 0;
+  std::size_t insertedGlyphCount = 0;
+  std::size_t alreadyPresentGlyphCount = 0;
+  std::size_t missingGlyphCount = 0;
+  bool atlasChanged = false;
 };
 
 struct PreparedTextLine {

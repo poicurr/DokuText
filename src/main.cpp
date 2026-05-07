@@ -1162,15 +1162,13 @@ clusterUsesColorRendering(FontContext &font,
 [[nodiscard]] GlyphHandle
 makeGlyphHandle(std::string_view fontPath, std::uint32_t glyphId,
                 unsigned int pixelSize, unsigned int paletteIndex,
-                std::size_t clusterIndex, std::size_t glyphIndexInCluster,
+                std::size_t /* clusterIndex */, std::size_t /* glyphIndexInCluster */,
                 bool isColorGlyph) {
   std::uint64_t hash = 0;
   hash = fnv1aAppend(hash, fontPath);
   hash = fnv1aAppend(hash, static_cast<std::uint64_t>(glyphId));
   hash = fnv1aAppend(hash, static_cast<std::uint64_t>(pixelSize));
   hash = fnv1aAppend(hash, static_cast<std::uint64_t>(paletteIndex));
-  hash = fnv1aAppend(hash, static_cast<std::uint64_t>(clusterIndex));
-  hash = fnv1aAppend(hash, static_cast<std::uint64_t>(glyphIndexInCluster));
   hash = fnv1aAppend(hash, static_cast<std::uint64_t>(isColorGlyph ? 1U : 0U));
   return GlyphHandle{hash};
 }
@@ -3953,6 +3951,8 @@ TextSystem::seedAtlas(TextAtlas &atlas,
   TextAtlasSeedResult result;
   result.seedRequest = seedRequest;
   result.codePoints = makeTextSeedCodepoints(seedRequest);
+  result.requestedCodepointCount = result.codePoints.size();
+
   if (result.codePoints.empty() && seedRequest.texts.empty()) {
     appendConstraintDiagnostic(result.diagnostics,
                                DiagnosticCode::CompatibilityConstraintViolation,
@@ -3966,16 +3966,34 @@ TextSystem::seedAtlas(TextAtlas &atlas,
       atlas.options(), encodeSeedText(result.codePoints, seedRequest.texts),
       prepareOptions);
   const MultiLineLayout layout = m_impl->m_renderer.layoutText(request);
+
+  const std::size_t pageCountBefore = atlas.pages().size();
+
   result.atlasUpdate = atlas.m_impl->m_cache.ensureGlyphs(layout);
-  atlas.m_impl->m_lastUpdate = result.atlasUpdate;
-  atlas.m_impl->m_lastUploadPlan =
-      buildAtlasPageUploadPlan(atlas.m_impl->m_cache, result.atlasUpdate);
-  result.atlasUploadPlan = atlas.m_impl->m_lastUploadPlan;
   result.compatibility = analyzeTextCompatibility(layout);
   result.diagnostics = collectPreparedDiagnostics(
       layout.diagnostics, result.compatibility.diagnostics,
       result.atlasUpdate.diagnostics);
   result.compatibility.diagnostics = result.diagnostics;
+
+  result.resolvedGlyphCount = layout.glyphs.size();
+  result.insertedGlyphCount = result.atlasUpdate.updatedEntries.size();
+  result.alreadyPresentGlyphCount =
+      result.resolvedGlyphCount - result.insertedGlyphCount;
+
+  result.missingGlyphCount = collectMissingGlyphs(result.diagnostics).size();
+  result.atlasChanged =
+      (result.insertedGlyphCount > 0) || (atlas.pages().size() > pageCountBefore);
+
+  if (result.atlasChanged) {
+    atlas.m_impl->m_lastUpdate = result.atlasUpdate;
+    atlas.m_impl->m_lastUploadPlan =
+        buildAtlasPageUploadPlan(atlas.m_impl->m_cache, result.atlasUpdate);
+    result.atlasUploadPlan = atlas.m_impl->m_lastUploadPlan;
+  } else {
+    result.atlasUploadPlan.clear();
+  }
+
   return result;
 }
 
