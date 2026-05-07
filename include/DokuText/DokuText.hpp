@@ -960,6 +960,7 @@ struct TextProbeResult {
   /// atlas. This may include duplicates if the same glyph appears multiple times in the text.
   std::size_t alreadyPresentGlyphCount = 0;
   /// Number of resolved glyph lookup events whose rasterization handle is not present in the atlas.
+  /// This count corresponds to the number of elements in the missingGlyphs vector.
   std::size_t missingGlyphCount = 0;
 
   /// True if every resolved glyph required for the text is already present in the atlas.
@@ -968,7 +969,9 @@ struct TextProbeResult {
   /// atlas.
   bool wouldAppendGlyphs = false;
 
-  /// List of resolved glyphs that are not currently present in the atlas.
+  /// The corresponding atlas-missing glyph lookup events.
+  /// This list may contain duplicate handles if the same missing glyph appears multiple times in
+  /// the probed text.
   /// These are missing from the atlas, not necessarily missing from the font fallback chain.
   std::vector<MissingAtlasGlyph> missingGlyphs;
   /// Non-fatal diagnostics from shaping/fallback/probing.
