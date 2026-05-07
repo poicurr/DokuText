@@ -770,6 +770,8 @@ public:
 
   [[nodiscard]] std::vector<GlyphAtlasEntry> entries() const;
 
+  [[nodiscard]] bool containsGlyph(GlyphHandle handle) const;
+
   [[nodiscard]] TextAtlasPageInfo pageInfo(std::size_t pageIndex) const;
 
   [[nodiscard]] TextAtlasPageInfo
@@ -934,6 +936,48 @@ struct PreparedTextParagraph {
   std::vector<Diagnostic> diagnostics;
 };
 
+/// MissingAtlasGlyph describes a glyph that was resolved through shaping
+/// and font fallback but is currently missing from the TextAtlas entries.
+struct MissingAtlasGlyph {
+  std::uint32_t codePoint = 0;
+  GlyphHandle handle{};
+  std::uint32_t glyphId = 0;
+  FontChainId fontChainId{};
+  std::string fontPath;
+  MaterialKind materialKind = MaterialKind::AlphaMask;
+  bool isColorGlyph = false;
+};
+
+/// TextProbeResult contains diagnostics for a text request without mutating the atlas.
+struct TextProbeResult {
+  TextRequest request;
+
+  /// Number of Unicode codepoints requested for probing.
+  std::size_t requestedCodepointCount = 0;
+  /// Number of glyph lookup events resolved through shaping/fallback.
+  std::size_t resolvedGlyphCount = 0;
+  /// Number of resolved glyph lookup events whose rasterization handle is already present in the
+  /// atlas. This may include duplicates if the same glyph appears multiple times in the text.
+  std::size_t alreadyPresentGlyphCount = 0;
+  /// Number of resolved glyph lookup events whose rasterization handle is not present in the atlas.
+  /// This count corresponds to the number of elements in the missingGlyphs vector.
+  std::size_t missingGlyphCount = 0;
+
+  /// True if every resolved glyph required for the text is already present in the atlas.
+  bool allGlyphsAvailable = false;
+  /// True if prepare/seed with append behavior would need to insert one or more glyphs into the
+  /// atlas.
+  bool wouldAppendGlyphs = false;
+
+  /// The corresponding atlas-missing glyph lookup events.
+  /// This list may contain duplicate handles if the same missing glyph appears multiple times in
+  /// the probed text.
+  /// These are missing from the atlas, not necessarily missing from the font fallback chain.
+  std::vector<MissingAtlasGlyph> missingGlyphs;
+  /// Non-fatal diagnostics from shaping/fallback/probing.
+  std::vector<Diagnostic> diagnostics;
+};
+
 class TextAtlas {
 public:
   explicit TextAtlas(const TextAtlasOptions &options);
@@ -952,6 +996,8 @@ public:
   [[nodiscard]] const std::vector<AtlasPageUploadPlan> &lastUploadPlan() const;
   [[nodiscard]] const std::vector<GlyphAtlasPage> &pages() const;
   [[nodiscard]] std::vector<GlyphAtlasEntry> entries() const;
+
+  [[nodiscard]] bool containsGlyph(GlyphHandle handle) const;
 
   [[nodiscard]] TextAtlasPageInfo pageInfo(std::size_t pageIndex) const;
 
@@ -1038,6 +1084,13 @@ public:
 
   [[nodiscard]] TextAtlasSeedResult
   seedAtlas(TextAtlas &atlas, const TextSeedRequest &seedRequest) const;
+
+  [[nodiscard]] TextProbeResult
+  probeText(const TextAtlas &atlas, std::string_view text,
+            const TextPrepareOptions &options = {}) const;
+
+  [[nodiscard]] TextProbeResult
+  probeText(const TextAtlas &atlas, const TextRequest &request) const;
 
   [[nodiscard]] BakedTextAtlas
   bakeTextAtlas(const TextAtlasBakeRequest &request) const;
