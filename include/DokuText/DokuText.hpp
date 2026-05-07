@@ -861,6 +861,23 @@ struct TextAtlasSeedResult {
   std::vector<AtlasPageUploadPlan> atlasUploadPlan;
   TextCompatibilityReport compatibility;
   std::vector<Diagnostic> diagnostics;
+
+  // Total number of unique codepoints requested to be seeded.
+  std::size_t requestedCodepointCount = 0;
+  // Total number of glyphs resolved from the requested codepoints/texts.
+  std::size_t resolvedGlyphCount = 0;
+  // Number of unique rasterization handles newly inserted into the atlas during this seedAtlas
+  // call.
+  std::size_t insertedGlyphCount = 0;
+  // Number of resolved glyph lookup events whose rasterization handle was already present when that
+  // glyph was processed. This may include duplicates encountered later in the same seedAtlas
+  // request.
+  std::size_t alreadyPresentGlyphCount = 0;
+  // Number of glyphs that could not be resolved or rasterized.
+  std::size_t missingGlyphCount = 0;
+  // True only if atlas contents changed, such as a new glyph entry, new page, or modified atlas
+  // texture contents.
+  bool atlasChanged = false;
 };
 
 struct PreparedTextLine {
