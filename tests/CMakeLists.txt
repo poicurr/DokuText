@@ -44,6 +44,7 @@ add_dokutext_test(
   DynamicAtlasSeedIdempotencyTest.cpp
 )
 add_dokutext_test(DokuTextTestPageInfo TextAtlasPageInfoTest.cpp)
+add_dokutext_test(DokuTextTestProbeText TextProbeTest.cpp)
 add_dokutext_test(DokuTextPublicHeaderSmoke DokuTextPublicHeaderSmoke.cpp)
 
 target_include_directories(

@@ -2424,6 +2424,10 @@ public:
     return m_pages;
   }
 
+  [[nodiscard]] bool containsGlyph(GlyphHandle handle) const {
+    return m_entriesByHandle.contains(handle.value);
+  }
+
   [[nodiscard]] std::vector<GlyphAtlasEntry> entries() const {
     std::vector<GlyphAtlasEntry> result;
     result.reserve(m_entriesByHandle.size());
@@ -2709,6 +2713,10 @@ const std::vector<GlyphAtlasPage> &GlyphAtlasCache::pages() const {
 
 std::vector<GlyphAtlasEntry> GlyphAtlasCache::entries() const {
   return m_impl->entries();
+}
+
+bool GlyphAtlasCache::containsGlyph(GlyphHandle handle) const {
+  return m_impl->containsGlyph(handle);
 }
 
 TextAtlasPageInfo GlyphAtlasCache::pageInfo(std::size_t pageIndex) const {
@@ -3788,6 +3796,10 @@ std::vector<GlyphAtlasEntry> TextAtlas::entries() const {
   return m_impl->m_cache.entries();
 }
 
+bool TextAtlas::containsGlyph(GlyphHandle handle) const {
+  return m_impl->m_cache.containsGlyph(handle);
+}
+
 TextAtlasPageInfo TextAtlas::pageInfo(std::size_t pageIndex) const {
   return m_impl->m_cache.pageInfo(pageIndex);
 }
@@ -4083,6 +4095,52 @@ TextSystem::bakeTextAtlas(const TextAtlasBakeRequest &request) const {
   bakedAtlas.m_impl->m_revision = computeBakedAtlasRevision(
       request, bakedAtlas.m_impl->m_entries, bakedAtlas.m_impl->m_pages);
   return bakedAtlas;
+}
+
+TextProbeResult TextSystem::probeText(const TextAtlas &atlas,
+                                      std::string_view text,
+                                      const TextPrepareOptions &options) const {
+  return probeText(atlas, makeAtlasBackedRequest(atlas.options(),
+                                                 std::string(text), options));
+}
+
+TextProbeResult TextSystem::probeText(const TextAtlas &atlas,
+                                      const TextRequest &request) const {
+  TextProbeResult result;
+  result.request = request;
+  result.requestedCodepointCount = decodeUtf8(request.text).size();
+
+  const TextLayoutContext context = makeTextLayoutContext(request);
+  const MultiLineShapeResult shape = m_impl->m_renderer.shapeText(context, request.text);
+
+  for (const TextShapeResult &line : shape.lines) {
+    for (const ShapedCluster &cluster : line.clusters) {
+      for (const ShapedGlyphInfo &glyph : cluster.glyphs) {
+        ++result.resolvedGlyphCount;
+        if (atlas.containsGlyph(glyph.handle)) {
+          ++result.alreadyPresentGlyphCount;
+        } else {
+          ++result.missingGlyphCount;
+
+          MissingAtlasGlyph missing;
+          missing.codePoint = !cluster.codePoints.empty() ? cluster.codePoints.front() : 0U;
+          missing.handle = glyph.handle;
+          missing.glyphId = glyph.glyphId;
+          missing.fontChainId = request.fontChainId;
+          missing.fontPath = cluster.fontPath;
+          missing.materialKind = pickMaterialKind(glyph.isColorGlyph);
+          missing.isColorGlyph = glyph.isColorGlyph;
+          result.missingGlyphs.push_back(std::move(missing));
+        }
+      }
+    }
+  }
+
+  result.allGlyphsAvailable = (result.missingGlyphCount == 0);
+  result.wouldAppendGlyphs = (result.missingGlyphCount > 0);
+  result.diagnostics = shape.diagnostics;
+
+  return result;
 }
 
 TextAtlasSeedResult
