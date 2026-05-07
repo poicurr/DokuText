@@ -69,22 +69,20 @@ int main() {
         return 1;
     }
     if (!result2.atlasUploadPlan.empty()) {
-        // Technically, an empty plan might be produced, but it should have no effect.
-        // The issue says "upload plan empty".
-        // Let's check the contents of the plan.
-        bool hasDirtyRects = false;
-        bool hasNewPages = false;
-        for (const auto& plan : result2.atlasUpdate.newPages) {
-             hasNewPages = true;
-        }
-        if (!result2.atlasUpdate.updatedEntries.empty()) {
-            std::cerr << "FAILED: Expected updatedEntries to be empty on second call\n";
-            return 1;
-        }
-        if (!result2.atlasUpdate.dirtyRects.empty()) {
-             std::cerr << "FAILED: Expected dirtyRects to be empty on second call\n";
-             return 1;
-        }
+        std::cerr << "FAILED: Expected atlasUploadPlan to be empty on second call\n";
+        return 1;
+    }
+    if (!result2.atlasUpdate.newPages.empty()) {
+        std::cerr << "FAILED: Expected newPages to be empty on second call\n";
+        return 1;
+    }
+    if (!result2.atlasUpdate.updatedEntries.empty()) {
+        std::cerr << "FAILED: Expected updatedEntries to be empty on second call\n";
+        return 1;
+    }
+    if (!result2.atlasUpdate.dirtyRects.empty()) {
+        std::cerr << "FAILED: Expected dirtyRects to be empty on second call\n";
+        return 1;
     }
 
     if (atlas.pages().size() != pageCountAfterFirst) {
