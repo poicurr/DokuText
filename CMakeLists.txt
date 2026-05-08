@@ -31,9 +31,18 @@ endif()
 
 add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 
-option(DOKU_TEXT_BUILD_CLI "Build DokuText CLI executable" ON)
-option(DOKU_TEXT_BUILD_EXAMPLES "Build DokuText examples" ON)
-option(DOKU_TEXT_BUILD_TESTS "Build DokuText tests" ON)
+option(DOKU_TEXT_BUILD_CLI
+  "Build DokuText CLI executable"
+  ${PROJECT_IS_TOP_LEVEL}
+)
+option(DOKU_TEXT_BUILD_EXAMPLES
+  "Build DokuText examples"
+  ${PROJECT_IS_TOP_LEVEL}
+)
+option(DOKU_TEXT_BUILD_TESTS
+  "Build DokuText tests"
+  ${PROJECT_IS_TOP_LEVEL}
+)
 
 set(DOKU_TEXT_ENABLE_PNG_IO_DEFAULT OFF)
 if (DOKU_TEXT_BUILD_CLI OR DOKU_TEXT_BUILD_EXAMPLES OR DOKU_TEXT_BUILD_TESTS)
