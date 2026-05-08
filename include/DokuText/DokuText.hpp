@@ -842,6 +842,9 @@ public:
   TextDrawRun buildDrawRun(const TextLineLayout &layout,
                            GlyphAtlasCache &atlasCache) const;
 
+  TextDrawRun buildDrawRun(const TextLineLayout &layout,
+                           const GlyphAtlasCache &atlasCache) const;
+
   MultiLineLayout layoutText(const TextLayoutContext &context,
                              std::string_view text) const;
 
@@ -853,6 +856,9 @@ public:
 
   MultiLineDrawRun buildDrawText(const MultiLineLayout &layout,
                                  GlyphAtlasCache &atlasCache) const;
+
+  MultiLineDrawRun buildDrawText(const MultiLineLayout &layout,
+                                 const GlyphAtlasCache &atlasCache) const;
 
   TextDrawRun prepareLine(const TextRequest &request,
                           GlyphAtlasCache &atlasCache) const;
@@ -885,6 +891,12 @@ struct TextAtlasBakeRequest {
 
 struct TextPrepareOptions {
   bool verifyMetrics = false;
+
+  /// If true, prepareLine/prepareText may append missing glyphs to the provided TextAtlas.
+  /// If false, prepareLine/prepareText must not mutate the atlas; missing atlas glyphs remain
+  /// missing and should be diagnosed through probeText or returned diagnostics if available.
+  bool allowGlyphAppend = true;
+
   ParagraphLayoutOptions layoutOptions;
 };
 
@@ -1102,12 +1114,20 @@ public:
   [[nodiscard]] PreparedTextLine prepareLine(TextAtlas &atlas,
                                              const TextRequest &request) const;
 
+  [[nodiscard]] PreparedTextLine prepareLine(TextAtlas &atlas,
+                                             const TextRequest &request,
+                                             const TextPrepareOptions &options) const;
+
   [[nodiscard]] PreparedTextParagraph
   prepareText(TextAtlas &atlas, std::string_view text,
               const TextPrepareOptions &options = {}) const;
 
   [[nodiscard]] PreparedTextParagraph
   prepareText(TextAtlas &atlas, const TextRequest &request) const;
+
+  [[nodiscard]] PreparedTextParagraph
+  prepareText(TextAtlas &atlas, const TextRequest &request,
+              const TextPrepareOptions &options) const;
 
   [[nodiscard]] PreparedTextLine
   layoutTextLine(const BakedTextAtlas &atlas, const TextRequest &request) const;
