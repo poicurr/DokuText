@@ -1,194 +1,357 @@
 #include <DokuText/DokuText.hpp>
+
+#include <cstdlib>
 #include <iostream>
-#include <cassert>
-#include <vector>
 #include <string>
+#include <vector>
 
 using namespace doku::text;
 
-void test_prepareLine_false_empty_atlas() {
-    std::cout << "Running test_prepareLine_false_empty_atlas..." << std::endl;
-    TextSystem system;
-    TextAtlasOptions atlasOptions;
-    atlasOptions.pixelSize = 32;
-    // Note: font paths are from build context memory
-    atlasOptions.fontChainId = system.registerFontFallbackChain({
-        {"fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf"},
-        {"fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf"},
-        {}
-    });
+namespace {
 
-    TextAtlas atlas(atlasOptions);
-    assert(atlas.pages().size() == 0);
-    assert(atlas.entries().size() == 0);
+constexpr const char *TEXT_FONT =
+    "fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf";
+constexpr const char *EMOJI_FONT =
+    "fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf";
 
-    TextPrepareOptions options;
-    options.allowGlyphAppend = false;
-
-    PreparedTextLine prepared = system.prepareLine(atlas, "Hello", options);
-
-    if (atlas.pages().size() != 0 || atlas.entries().size() != 0) {
-        std::cerr << "FAILED at after prepareLine allowGlyphAppend=false: pages "
-                  << atlas.pages().size() << ", entries " << atlas.entries().size() << std::endl;
-        exit(1);
-    }
-
-    TextProbeResult probe = system.probeText(atlas, "Hello");
-    if (probe.allGlyphsAvailable) {
-        std::cerr << "FAILED: probe should report missing glyphs on empty atlas" << std::endl;
-        exit(1);
-    }
-    std::cout << "test_prepareLine_false_empty_atlas passed." << std::endl;
+[[noreturn]] void fail(const std::string &message) {
+  std::cerr << "FAILED: " << message << std::endl;
+  std::exit(1);
 }
 
-void test_prepareText_false_empty_atlas() {
-    std::cout << "Running test_prepareText_false_empty_atlas..." << std::endl;
-    TextSystem system;
-    TextAtlasOptions atlasOptions;
-    atlasOptions.pixelSize = 32;
-    atlasOptions.fontChainId = system.registerFontFallbackChain({
-        {"fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf"},
-        {"fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf"},
-        {}
-    });
+void check(bool condition, const std::string &message) {
+  if (!condition) {
+    fail(message);
+  }
+}
 
-    TextAtlas atlas(atlasOptions);
-    TextPrepareOptions options;
-    options.allowGlyphAppend = false;
+struct AtlasSnapshot {
+  std::size_t pageCount = 0;
+  std::size_t entryCount = 0;
+};
 
-    PreparedTextParagraph prepared = system.prepareText(atlas, "Multi\nLine", options);
+AtlasSnapshot snapshot(const TextAtlas &atlas) {
+  return AtlasSnapshot{
+      atlas.pages().size(),
+      atlas.entries().size(),
+  };
+}
 
-    if (atlas.pages().size() != 0 || atlas.entries().size() != 0) {
-        std::cerr << "FAILED at after prepareText allowGlyphAppend=false: pages "
-                  << atlas.pages().size() << ", entries " << atlas.entries().size() << std::endl;
-        exit(1);
+void checkUnchanged(const AtlasSnapshot &before, const TextAtlas &atlas,
+                    const std::string &stage) {
+  const AtlasSnapshot after = snapshot(atlas);
+  if (after.pageCount != before.pageCount ||
+      after.entryCount != before.entryCount) {
+    std::cerr << "FAILED at " << stage << ": pages " << before.pageCount
+              << " -> " << after.pageCount << ", entries "
+              << before.entryCount << " -> " << after.entryCount
+              << std::endl;
+    std::exit(1);
+  }
+}
+
+FontChainId registerDefaultChain(TextSystem &system) {
+  FontFallbackChain chain;
+  chain.textFonts = {TEXT_FONT};
+  chain.emojiFonts = {EMOJI_FONT};
+  return system.registerFontFallbackChain(chain);
+}
+
+TextAtlasOptions makeAtlasOptions(FontChainId fontChainId,
+                                  unsigned int pixelSize = 32) {
+  TextAtlasOptions options;
+  options.fontChainId = fontChainId;
+  options.pixelSize = pixelSize;
+  return options;
+}
+
+TextRequest makeRequest(const TextAtlasOptions &atlasOptions,
+                        std::string text) {
+  TextRequest request;
+  request.text = std::move(text);
+  request.fontChainId = atlasOptions.fontChainId;
+  request.pixelSize = atlasOptions.pixelSize;
+  request.paletteIndex = atlasOptions.paletteIndex;
+  request.layoutOptions = {};
+  return request;
+}
+
+bool hasMissingColorBitmapGlyph(const TextProbeResult &probe) {
+  for (const MissingAtlasGlyph &missing : probe.missingGlyphs) {
+    if (missing.isColorGlyph ||
+        missing.materialKind == MaterialKind::ColorBitmap) {
+      return true;
     }
-    std::cout << "test_prepareText_false_empty_atlas passed." << std::endl;
+  }
+  return false;
+}
+
+void test_prepareLine_false_empty_atlas_string_view() {
+  std::cout << "Running test_prepareLine_false_empty_atlas_string_view..."
+            << std::endl;
+
+  TextSystem system;
+  const FontChainId fontChainId = registerDefaultChain(system);
+  TextAtlasOptions atlasOptions = makeAtlasOptions(fontChainId);
+  TextAtlas atlas(atlasOptions);
+
+  check(atlas.pages().empty(), "fresh atlas should have no pages");
+  check(atlas.entries().empty(), "fresh atlas should have no entries");
+
+  TextPrepareOptions options;
+  options.allowGlyphAppend = false;
+
+  const AtlasSnapshot before = snapshot(atlas);
+  (void)system.prepareLine(atlas, "Hello", options);
+  checkUnchanged(before, atlas,
+                 "after prepareLine(string_view, allowGlyphAppend=false)");
+
+  TextProbeResult probe = system.probeText(atlas, "Hello");
+  check(!probe.allGlyphsAvailable,
+        "probe should report missing glyphs on empty atlas");
+  check(probe.missingGlyphCount > 0,
+        "probe should report missingGlyphCount > 0 on empty atlas");
+}
+
+void test_prepareText_false_empty_atlas_string_view() {
+  std::cout << "Running test_prepareText_false_empty_atlas_string_view..."
+            << std::endl;
+
+  TextSystem system;
+  const FontChainId fontChainId = registerDefaultChain(system);
+  TextAtlasOptions atlasOptions = makeAtlasOptions(fontChainId);
+  TextAtlas atlas(atlasOptions);
+
+  TextPrepareOptions options;
+  options.allowGlyphAppend = false;
+
+  const AtlasSnapshot before = snapshot(atlas);
+  (void)system.prepareText(atlas, "Multi\nLine", options);
+  checkUnchanged(before, atlas,
+                 "after prepareText(string_view, allowGlyphAppend=false)");
+
+  TextProbeResult probe = system.probeText(atlas, "Multi\nLine");
+  check(!probe.allGlyphsAvailable,
+        "probe should report missing glyphs after non-mutating prepareText");
+  check(probe.missingGlyphCount > 0,
+        "probe should report missingGlyphCount > 0 after non-mutating prepareText");
+}
+
+void test_prepareLine_false_empty_atlas_text_request() {
+  std::cout << "Running test_prepareLine_false_empty_atlas_text_request..."
+            << std::endl;
+
+  TextSystem system;
+  const FontChainId fontChainId = registerDefaultChain(system);
+  TextAtlasOptions atlasOptions = makeAtlasOptions(fontChainId);
+  TextAtlas atlas(atlasOptions);
+
+  TextRequest request = makeRequest(atlasOptions, "Hello");
+
+  TextPrepareOptions options;
+  options.allowGlyphAppend = false;
+
+  const AtlasSnapshot before = snapshot(atlas);
+  (void)system.prepareLine(atlas, request, options);
+  checkUnchanged(before, atlas,
+                 "after prepareLine(TextRequest, allowGlyphAppend=false)");
+
+  TextProbeResult probe = system.probeText(atlas, request);
+  check(!probe.allGlyphsAvailable,
+        "probe should report missing glyphs after TextRequest non-mutating prepareLine");
+  check(probe.missingGlyphCount > 0,
+        "probe should report missingGlyphCount > 0 after TextRequest non-mutating prepareLine");
+}
+
+void test_prepareText_false_empty_atlas_text_request() {
+  std::cout << "Running test_prepareText_false_empty_atlas_text_request..."
+            << std::endl;
+
+  TextSystem system;
+  const FontChainId fontChainId = registerDefaultChain(system);
+  TextAtlasOptions atlasOptions = makeAtlasOptions(fontChainId);
+  TextAtlas atlas(atlasOptions);
+
+  TextRequest request = makeRequest(atlasOptions, "Multi\nLine");
+
+  TextPrepareOptions options;
+  options.allowGlyphAppend = false;
+
+  const AtlasSnapshot before = snapshot(atlas);
+  (void)system.prepareText(atlas, request, options);
+  checkUnchanged(before, atlas,
+                 "after prepareText(TextRequest, allowGlyphAppend=false)");
+
+  TextProbeResult probe = system.probeText(atlas, request);
+  check(!probe.allGlyphsAvailable,
+        "probe should report missing glyphs after TextRequest non-mutating prepareText");
+  check(probe.missingGlyphCount > 0,
+        "probe should report missingGlyphCount > 0 after TextRequest non-mutating prepareText");
 }
 
 void test_prepareLine_true_empty_atlas() {
-    std::cout << "Running test_prepareLine_true_empty_atlas..." << std::endl;
-    TextSystem system;
-    TextAtlasOptions atlasOptions;
-    atlasOptions.pixelSize = 32;
-    atlasOptions.fontChainId = system.registerFontFallbackChain({
-        {"fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf"},
-        {"fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf"},
-        {}
-    });
+  std::cout << "Running test_prepareLine_true_empty_atlas..." << std::endl;
 
-    TextAtlas atlas(atlasOptions);
-    TextPrepareOptions options;
-    options.allowGlyphAppend = true;
+  TextSystem system;
+  const FontChainId fontChainId = registerDefaultChain(system);
+  TextAtlasOptions atlasOptions = makeAtlasOptions(fontChainId);
+  TextAtlas atlas(atlasOptions);
 
-    PreparedTextLine prepared = system.prepareLine(atlas, "Hello", options);
+  TextPrepareOptions options;
+  options.allowGlyphAppend = true;
 
-    if (atlas.entries().size() == 0) {
-        std::cerr << "FAILED: allowGlyphAppend=true should append glyphs" << std::endl;
-        exit(1);
-    }
-    if (atlas.pages().size() == 0) {
-        std::cerr << "FAILED: allowGlyphAppend=true should create pages" << std::endl;
-        exit(1);
-    }
+  (void)system.prepareLine(atlas, "Hello", options);
 
-    TextProbeResult probe = system.probeText(atlas, "Hello");
-    if (!probe.allGlyphsAvailable) {
-        std::cerr << "FAILED: probe should report allGlyphsAvailable after mutating prepare" << std::endl;
-        exit(1);
-    }
-    std::cout << "test_prepareLine_true_empty_atlas passed." << std::endl;
+  check(!atlas.entries().empty(),
+        "allowGlyphAppend=true should append glyph entries");
+  check(!atlas.pages().empty(),
+        "allowGlyphAppend=true should create atlas pages");
+
+  TextProbeResult probe = system.probeText(atlas, "Hello");
+  check(probe.allGlyphsAvailable,
+        "probe should report allGlyphsAvailable after mutating prepareLine");
+  check(probe.missingGlyphCount == 0,
+        "probe should report missingGlyphCount == 0 after mutating prepareLine");
 }
 
 void test_default_options_preserve_behavior() {
-    std::cout << "Running test_default_options_preserve_behavior..." << std::endl;
-    TextSystem system;
-    TextAtlasOptions atlasOptions;
-    atlasOptions.pixelSize = 32;
-    atlasOptions.fontChainId = system.registerFontFallbackChain({
-        {"fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf"},
-        {"fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf"},
-        {}
-    });
+  std::cout << "Running test_default_options_preserve_behavior..." << std::endl;
 
-    TextAtlas atlas(atlasOptions);
-    // Call without options
-    system.prepareLine(atlas, "Default");
+  TextSystem system;
+  const FontChainId fontChainId = registerDefaultChain(system);
+  TextAtlasOptions atlasOptions = makeAtlasOptions(fontChainId);
+  TextAtlas atlas(atlasOptions);
 
-    if (atlas.entries().size() == 0) {
-        std::cerr << "FAILED: default options should allow append" << std::endl;
-        exit(1);
-    }
-    std::cout << "test_default_options_preserve_behavior passed." << std::endl;
+  (void)system.prepareLine(atlas, "Default");
+
+  check(!atlas.entries().empty(),
+        "default TextPrepareOptions should allow glyph append");
+  check(!atlas.pages().empty(),
+        "default TextPrepareOptions should allow page creation");
 }
 
-void test_seeded_atlas_false() {
-    std::cout << "Running test_seeded_atlas_false..." << std::endl;
-    TextSystem system;
-    TextAtlasOptions atlasOptions;
-    atlasOptions.pixelSize = 32;
-    atlasOptions.fontChainId = system.registerFontFallbackChain({
-        {"fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf"},
-        {"fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf"},
-        {}
-    });
+void test_seeded_atlas_false_string_view() {
+  std::cout << "Running test_seeded_atlas_false_string_view..." << std::endl;
 
-    TextAtlas atlas(atlasOptions);
-    TextSeedRequest seed;
-    seed.texts = {"Hello"};
-    system.seedAtlas(atlas, seed);
+  TextSystem system;
+  const FontChainId fontChainId = registerDefaultChain(system);
+  TextAtlasOptions atlasOptions = makeAtlasOptions(fontChainId);
+  TextAtlas atlas(atlasOptions);
 
-    std::size_t entriesBefore = atlas.entries().size();
-    std::size_t pagesBefore = atlas.pages().size();
+  TextSeedRequest seed;
+  seed.texts = {"Hello"};
+  (void)system.seedAtlas(atlas, seed);
 
-    TextPrepareOptions options;
-    options.allowGlyphAppend = false;
-    system.prepareLine(atlas, "Hello", options);
+  TextPrepareOptions options;
+  options.allowGlyphAppend = false;
 
-    if (atlas.entries().size() != entriesBefore || atlas.pages().size() != pagesBefore) {
-        std::cerr << "FAILED: seeded atlas mutated with allowGlyphAppend=false" << std::endl;
-        exit(1);
-    }
-    std::cout << "test_seeded_atlas_false passed." << std::endl;
+  const AtlasSnapshot before = snapshot(atlas);
+  (void)system.prepareLine(atlas, "Hello", options);
+  checkUnchanged(before, atlas,
+                 "after seeded prepareLine(string_view, allowGlyphAppend=false)");
+
+  TextProbeResult probe = system.probeText(atlas, "Hello");
+  check(probe.allGlyphsAvailable,
+        "seeded atlas should already contain glyphs for Hello");
+  check(probe.missingGlyphCount == 0,
+        "seeded atlas should have missingGlyphCount == 0 for Hello");
 }
 
-void test_emoji_false() {
-    std::cout << "Running test_emoji_false..." << std::endl;
-    TextSystem system;
-    TextAtlasOptions atlasOptions;
-    atlasOptions.pixelSize = 32;
-    atlasOptions.fontChainId = system.registerFontFallbackChain({
-        {"fonts/Moralerspace_v2.0.0/MoralerspaceKrypton-Regular.ttf"},
-        {"fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf"},
-        {}
-    });
+void test_seeded_atlas_false_text_request() {
+  std::cout << "Running test_seeded_atlas_false_text_request..." << std::endl;
 
-    TextAtlas atlas(atlasOptions);
-    TextPrepareOptions options;
-    options.allowGlyphAppend = false;
+  TextSystem system;
+  const FontChainId fontChainId = registerDefaultChain(system);
+  TextAtlasOptions atlasOptions = makeAtlasOptions(fontChainId);
+  TextAtlas atlas(atlasOptions);
 
-    // Sushi emoji
-    system.prepareLine(atlas, "🍣", options);
+  TextSeedRequest seed;
+  seed.texts = {"Hello"};
+  (void)system.seedAtlas(atlas, seed);
 
-    if (atlas.pages().size() != 0 || atlas.entries().size() != 0) {
-        std::cerr << "FAILED: emoji prepareLine allowGlyphAppend=false mutated atlas" << std::endl;
-        exit(1);
-    }
-    std::cout << "test_emoji_false passed." << std::endl;
+  TextRequest request = makeRequest(atlasOptions, "Hello");
+
+  TextPrepareOptions options;
+  options.allowGlyphAppend = false;
+
+  const AtlasSnapshot before = snapshot(atlas);
+  (void)system.prepareLine(atlas, request, options);
+  checkUnchanged(before, atlas,
+                 "after seeded prepareLine(TextRequest, allowGlyphAppend=false)");
+
+  TextProbeResult probe = system.probeText(atlas, request);
+  check(probe.allGlyphsAvailable,
+        "seeded atlas should already contain glyphs for TextRequest Hello");
+  check(probe.missingGlyphCount == 0,
+        "seeded atlas should have missingGlyphCount == 0 for TextRequest Hello");
 }
+
+void test_emoji_false_string_view() {
+  std::cout << "Running test_emoji_false_string_view..." << std::endl;
+
+  TextSystem system;
+  const FontChainId fontChainId = registerDefaultChain(system);
+  TextAtlasOptions atlasOptions = makeAtlasOptions(fontChainId, 64);
+  TextAtlas atlas(atlasOptions);
+
+  TextPrepareOptions options;
+  options.allowGlyphAppend = false;
+
+  const AtlasSnapshot before = snapshot(atlas);
+  (void)system.prepareLine(atlas, "🍣", options);
+  checkUnchanged(before, atlas,
+                 "after emoji prepareLine(string_view, allowGlyphAppend=false)");
+
+  TextProbeResult probe = system.probeText(atlas, "🍣");
+  check(!probe.allGlyphsAvailable,
+        "emoji should still be missing after non-mutating prepareLine");
+  check(probe.missingGlyphCount > 0,
+        "emoji probe should report missing glyphs after non-mutating prepareLine");
+  check(hasMissingColorBitmapGlyph(probe),
+        "emoji probe should report missing ColorBitmap/color glyph");
+}
+
+void test_emoji_false_text_request() {
+  std::cout << "Running test_emoji_false_text_request..." << std::endl;
+
+  TextSystem system;
+  const FontChainId fontChainId = registerDefaultChain(system);
+  TextAtlasOptions atlasOptions = makeAtlasOptions(fontChainId, 64);
+  TextAtlas atlas(atlasOptions);
+
+  TextRequest request = makeRequest(atlasOptions, "🍣");
+
+  TextPrepareOptions options;
+  options.allowGlyphAppend = false;
+
+  const AtlasSnapshot before = snapshot(atlas);
+  (void)system.prepareLine(atlas, request, options);
+  checkUnchanged(before, atlas,
+                 "after emoji prepareLine(TextRequest, allowGlyphAppend=false)");
+
+  TextProbeResult probe = system.probeText(atlas, request);
+  check(!probe.allGlyphsAvailable,
+        "emoji TextRequest should still be missing after non-mutating prepareLine");
+  check(probe.missingGlyphCount > 0,
+        "emoji TextRequest probe should report missing glyphs");
+  check(hasMissingColorBitmapGlyph(probe),
+        "emoji TextRequest probe should report missing ColorBitmap/color glyph");
+}
+
+} // namespace
 
 int main() {
-    try {
-        test_prepareLine_false_empty_atlas();
-        test_prepareText_false_empty_atlas();
-        test_prepareLine_true_empty_atlas();
-        test_default_options_preserve_behavior();
-        test_seeded_atlas_false();
-        test_emoji_false();
-        std::cout << "ALL TextPrepareAllowGlyphAppendTest PASSED" << std::endl;
-    } catch (const std::exception& e) {
-        std::cerr << "Unhandled exception: " << e.what() << std::endl;
-        return 1;
-    }
-    return 0;
+  test_prepareLine_false_empty_atlas_string_view();
+  test_prepareText_false_empty_atlas_string_view();
+  test_prepareLine_false_empty_atlas_text_request();
+  test_prepareText_false_empty_atlas_text_request();
+  test_prepareLine_true_empty_atlas();
+  test_default_options_preserve_behavior();
+  test_seeded_atlas_false_string_view();
+  test_seeded_atlas_false_text_request();
+  test_emoji_false_string_view();
+  test_emoji_false_text_request();
+
+  std::cout << "ALL TextPrepareAllowGlyphAppendTest PASSED" << std::endl;
+  return 0;
 }
