@@ -53,7 +53,6 @@ struct GlyphAtlasPageHandle {
   std::uint32_t value = 0;
 };
 
-
 // LineMetrics uses the same coordinate space as PositionedGlyph::originX/Y.
 // X grows to the right. Y grows downward.
 // baseline is the Y coordinate of the baseline within the line-local space.
@@ -777,8 +776,7 @@ public:
   [[nodiscard]] TextAtlasPageInfo
   pageInfo(GlyphAtlasPageHandle pageHandle) const;
 
-  [[nodiscard]] MaterialKind
-  materialKindForPage(std::size_t pageIndex) const;
+  [[nodiscard]] MaterialKind materialKindForPage(std::size_t pageIndex) const;
 
   [[nodiscard]] MaterialKind
   materialKindForPage(GlyphAtlasPageHandle pageHandle) const;
@@ -789,8 +787,7 @@ public:
   [[nodiscard]] AtlasPixelFormat
   pixelFormatForPage(GlyphAtlasPageHandle pageHandle) const;
 
-  [[nodiscard]] SamplerKind
-  samplerKindForPage(std::size_t pageIndex) const;
+  [[nodiscard]] SamplerKind samplerKindForPage(std::size_t pageIndex) const;
 
   [[nodiscard]] SamplerKind
   samplerKindForPage(GlyphAtlasPageHandle pageHandle) const;
@@ -892,9 +889,10 @@ struct TextAtlasBakeRequest {
 struct TextPrepareOptions {
   bool verifyMetrics = false;
 
-  /// If true, prepareLine/prepareText may append missing glyphs to the provided TextAtlas.
-  /// If false, prepareLine/prepareText must not mutate the atlas; missing atlas glyphs remain
-  /// missing and should be diagnosed through probeText or returned diagnostics if available.
+  /// If true, prepareLine/prepareText may append missing glyphs to the provided
+  /// TextAtlas. If false, prepareLine/prepareText must not mutate the atlas;
+  /// missing atlas glyphs remain missing and should be diagnosed through
+  /// probeText or returned diagnostics if available.
   bool allowGlyphAppend = true;
 
   ParagraphLayoutOptions layoutOptions;
@@ -912,17 +910,17 @@ struct TextAtlasSeedResult {
   std::size_t requestedCodepointCount = 0;
   // Total number of glyphs resolved from the requested codepoints/texts.
   std::size_t resolvedGlyphCount = 0;
-  // Number of unique rasterization handles newly inserted into the atlas during this seedAtlas
-  // call.
+  // Number of unique rasterization handles newly inserted into the atlas during
+  // this seedAtlas call.
   std::size_t insertedGlyphCount = 0;
-  // Number of resolved glyph lookup events whose rasterization handle was already present when that
-  // glyph was processed. This may include duplicates encountered later in the same seedAtlas
-  // request.
+  // Number of resolved glyph lookup events whose rasterization handle was
+  // already present when that glyph was processed. This may include duplicates
+  // encountered later in the same seedAtlas request.
   std::size_t alreadyPresentGlyphCount = 0;
   // Number of glyphs that could not be resolved or rasterized.
   std::size_t missingGlyphCount = 0;
-  // True only if atlas contents changed, such as a new glyph entry, new page, or modified atlas
-  // texture contents.
+  // True only if atlas contents changed, such as a new glyph entry, new page,
+  // or modified atlas texture contents.
   bool atlasChanged = false;
 };
 
@@ -960,7 +958,8 @@ struct MissingAtlasGlyph {
   bool isColorGlyph = false;
 };
 
-/// TextProbeResult contains diagnostics for a text request without mutating the atlas.
+/// TextProbeResult contains diagnostics for a text request without mutating the
+/// atlas.
 struct TextProbeResult {
   TextRequest request;
 
@@ -968,23 +967,26 @@ struct TextProbeResult {
   std::size_t requestedCodepointCount = 0;
   /// Number of glyph lookup events resolved through shaping/fallback.
   std::size_t resolvedGlyphCount = 0;
-  /// Number of resolved glyph lookup events whose rasterization handle is already present in the
-  /// atlas. This may include duplicates if the same glyph appears multiple times in the text.
+  /// Number of resolved glyph lookup events whose rasterization handle is
+  /// already present in the atlas. This may include duplicates if the same
+  /// glyph appears multiple times in the text.
   std::size_t alreadyPresentGlyphCount = 0;
-  /// Number of resolved glyph lookup events whose rasterization handle is not present in the atlas.
-  /// This count corresponds to the number of elements in the missingGlyphs vector.
+  /// Number of resolved glyph lookup events whose rasterization handle is not
+  /// present in the atlas. This count corresponds to the number of elements in
+  /// the missingGlyphs vector.
   std::size_t missingGlyphCount = 0;
 
-  /// True if every resolved glyph required for the text is already present in the atlas.
+  /// True if every resolved glyph required for the text is already present in
+  /// the atlas.
   bool allGlyphsAvailable = false;
-  /// True if prepare/seed with append behavior would need to insert one or more glyphs into the
-  /// atlas.
+  /// True if prepare/seed with append behavior would need to insert one or more
+  /// glyphs into the atlas.
   bool wouldAppendGlyphs = false;
 
   /// The corresponding atlas-missing glyph lookup events.
-  /// This list may contain duplicate handles if the same missing glyph appears multiple times in
-  /// the probed text.
-  /// These are missing from the atlas, not necessarily missing from the font fallback chain.
+  /// This list may contain duplicate handles if the same missing glyph appears
+  /// multiple times in the probed text. These are missing from the atlas, not
+  /// necessarily missing from the font fallback chain.
   std::vector<MissingAtlasGlyph> missingGlyphs;
   /// Non-fatal diagnostics from shaping/fallback/probing.
   std::vector<Diagnostic> diagnostics;
@@ -1016,8 +1018,7 @@ public:
   [[nodiscard]] TextAtlasPageInfo
   pageInfo(GlyphAtlasPageHandle pageHandle) const;
 
-  [[nodiscard]] MaterialKind
-  materialKindForPage(std::size_t pageIndex) const;
+  [[nodiscard]] MaterialKind materialKindForPage(std::size_t pageIndex) const;
 
   [[nodiscard]] MaterialKind
   materialKindForPage(GlyphAtlasPageHandle pageHandle) const;
@@ -1028,8 +1029,7 @@ public:
   [[nodiscard]] AtlasPixelFormat
   pixelFormatForPage(GlyphAtlasPageHandle pageHandle) const;
 
-  [[nodiscard]] SamplerKind
-  samplerKindForPage(std::size_t pageIndex) const;
+  [[nodiscard]] SamplerKind samplerKindForPage(std::size_t pageIndex) const;
 
   [[nodiscard]] SamplerKind
   samplerKindForPage(GlyphAtlasPageHandle pageHandle) const;
@@ -1101,8 +1101,8 @@ public:
   probeText(const TextAtlas &atlas, std::string_view text,
             const TextPrepareOptions &options = {}) const;
 
-  [[nodiscard]] TextProbeResult
-  probeText(const TextAtlas &atlas, const TextRequest &request) const;
+  [[nodiscard]] TextProbeResult probeText(const TextAtlas &atlas,
+                                          const TextRequest &request) const;
 
   [[nodiscard]] BakedTextAtlas
   bakeTextAtlas(const TextAtlasBakeRequest &request) const;
@@ -1114,9 +1114,9 @@ public:
   [[nodiscard]] PreparedTextLine prepareLine(TextAtlas &atlas,
                                              const TextRequest &request) const;
 
-  [[nodiscard]] PreparedTextLine prepareLine(TextAtlas &atlas,
-                                             const TextRequest &request,
-                                             const TextPrepareOptions &options) const;
+  [[nodiscard]] PreparedTextLine
+  prepareLine(TextAtlas &atlas, const TextRequest &request,
+              const TextPrepareOptions &options) const;
 
   [[nodiscard]] PreparedTextParagraph
   prepareText(TextAtlas &atlas, std::string_view text,

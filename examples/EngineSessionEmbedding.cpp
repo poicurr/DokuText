@@ -47,8 +47,7 @@ int main() {
   doku::text::GlyphAtlasCache atlasCache(atlasContext);
   const doku::text::AtlasBuildResult atlas =
       renderer.buildAtlas(layout, atlasContext);
-  const doku::text::TextDrawRun drawRun =
-      renderer.buildDrawRun(layout, atlas);
+  const doku::text::TextDrawRun drawRun = renderer.buildDrawRun(layout, atlas);
   const doku::text::GlyphAtlasCacheUpdate atlasUpdate =
       atlasCache.ensureGlyphs(layout);
   const std::vector<doku::text::AtlasPageUploadPlan> atlasUploadPlan =
@@ -68,8 +67,7 @@ int main() {
   alphaOnlyConstraints.allowMultiplePages = false;
   alphaOnlyConstraints.maxPages = 1;
   const doku::text::TextCompatibilityReport constrainedCompatibility =
-      doku::text::analyzeTextCompatibility(cachedDrawRun,
-                                              alphaOnlyConstraints);
+      doku::text::analyzeTextCompatibility(cachedDrawRun, alphaOnlyConstraints);
   const doku::text::TextDrawSubmission submission =
       doku::text::buildTextDrawSubmission(cachedMultiDraw);
 

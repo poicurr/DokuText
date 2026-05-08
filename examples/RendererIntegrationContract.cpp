@@ -48,21 +48,20 @@ int main() {
   }
 
   std::cout << "[example] renderer integration contract\n";
-  std::cout
-      << "uvOrigin=" << doku::text::toString(doku::text::atlasUvOrigin())
-      << " alphaPixelFormat="
-      << doku::text::toString(doku::text::atlasPixelFormatForMaterial(
-             doku::text::MaterialKind::AlphaMask))
-      << " alphaTint="
-      << doku::text::materialSupportsVertexTint(
-             doku::text::MaterialKind::AlphaMask)
-      << " colorPixelFormat="
-      << doku::text::toString(doku::text::atlasPixelFormatForMaterial(
-             doku::text::MaterialKind::ColorBitmap))
-      << " colorTint="
-      << doku::text::materialSupportsVertexTint(
-             doku::text::MaterialKind::ColorBitmap)
-      << '\n';
+  std::cout << "uvOrigin=" << doku::text::toString(doku::text::atlasUvOrigin())
+            << " alphaPixelFormat="
+            << doku::text::toString(doku::text::atlasPixelFormatForMaterial(
+                   doku::text::MaterialKind::AlphaMask))
+            << " alphaTint="
+            << doku::text::materialSupportsVertexTint(
+                   doku::text::MaterialKind::AlphaMask)
+            << " colorPixelFormat="
+            << doku::text::toString(doku::text::atlasPixelFormatForMaterial(
+                   doku::text::MaterialKind::ColorBitmap))
+            << " colorTint="
+            << doku::text::materialSupportsVertexTint(
+                   doku::text::MaterialKind::ColorBitmap)
+            << '\n';
   std::cout << "seed.pages=" << atlas.pages().size()
             << " seed.uploadPlans=" << seed.atlasUploadPlan.size()
             << " prepared.uploadPlans=" << prepared.atlasUploadPlan.size()
