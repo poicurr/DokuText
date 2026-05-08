@@ -2816,14 +2816,20 @@ TextDrawRun DokuText::buildDrawRun(const TextLineLayout &layout,
 TextDrawRun DokuText::buildDrawRun(const TextLineLayout &layout,
                                         GlyphAtlasCache &atlasCache) const {
   GlyphAtlasCacheUpdate update = atlasCache.ensureGlyphs(layout);
+  TextDrawRun result = buildDrawRun(layout, static_cast<const GlyphAtlasCache &>(atlasCache));
+  result.diagnostics.insert(result.diagnostics.end(), update.diagnostics.begin(),
+                            update.diagnostics.end());
+  result.diagnosticsSummary = buildDiagnosticsSummary(result.diagnostics, result.summary);
+  return result;
+}
+
+TextDrawRun DokuText::buildDrawRun(const TextLineLayout &layout,
+                                        const GlyphAtlasCache &atlasCache) const {
   TextDrawRun result;
   result.metrics = layout.metrics;
   result.summary = layout.summary;
   result.fallbackTrace = layout.fallbackTrace;
   result.diagnostics = layout.diagnostics;
-  result.diagnostics.insert(result.diagnostics.end(),
-                            update.diagnostics.begin(),
-                            update.diagnostics.end());
   result.glyphs = layout.glyphs;
 
   for (PositionedGlyph &glyph : result.glyphs) {
@@ -2851,8 +2857,7 @@ TextDrawRun DokuText::buildDrawRun(const TextLineLayout &layout,
   }
 
   result.summary.atlasPageCount = atlasCache.pages().size();
-  result.diagnosticsSummary =
-      buildDiagnosticsSummary(result.diagnostics, result.summary);
+  result.diagnosticsSummary = buildDiagnosticsSummary(result.diagnostics, result.summary);
   return result;
 }
 
@@ -2876,6 +2881,16 @@ MultiLineDrawRun
 DokuText::buildDrawText(const MultiLineLayout &layout,
                              GlyphAtlasCache &atlasCache) const {
   GlyphAtlasCacheUpdate update = atlasCache.ensureGlyphs(layout);
+  MultiLineDrawRun result = buildDrawText(layout, static_cast<const GlyphAtlasCache &>(atlasCache));
+  result.diagnostics.insert(result.diagnostics.end(), update.diagnostics.begin(),
+                            update.diagnostics.end());
+  result.diagnosticsSummary = buildDiagnosticsSummary(result.diagnostics, result.summary);
+  return result;
+}
+
+MultiLineDrawRun
+DokuText::buildDrawText(const MultiLineLayout &layout,
+                             const GlyphAtlasCache &atlasCache) const {
   MultiLineDrawRun result;
   result.lineTexts = layout.lineTexts;
   result.lineOriginsY = layout.lineOriginsY;
@@ -2885,24 +2900,18 @@ DokuText::buildDrawText(const MultiLineLayout &layout,
   result.boundingBox = layout.boundingBox;
   result.lineAdvance = layout.lineAdvance;
   result.diagnostics.clear();
-  result.diagnostics.insert(result.diagnostics.end(),
-                            update.diagnostics.begin(),
-                            update.diagnostics.end());
   result.lines.reserve(layout.lines.size());
   result.glyphs.reserve(layout.glyphs.size());
 
   for (const TextLineLayout &line : layout.lines) {
     TextDrawRun drawRun = buildDrawRun(line, atlasCache);
     const std::size_t lineIndex = result.lines.size();
-    const int originY = lineIndex < layout.lineOriginsY.size()
-                            ? layout.lineOriginsY[lineIndex]
-                            : 0;
+    const int originY = lineIndex < layout.lineOriginsY.size() ? layout.lineOriginsY[lineIndex] : 0;
     for (PositionedGlyph &glyph : drawRun.glyphs) {
       glyph.lineIndex = lineIndex;
       glyph.originY += originY;
     }
-    result.diagnostics.insert(result.diagnostics.end(),
-                              drawRun.diagnostics.begin(),
+    result.diagnostics.insert(result.diagnostics.end(), drawRun.diagnostics.begin(),
                               drawRun.diagnostics.end());
     result.lines.push_back(std::move(drawRun));
   }
@@ -2927,8 +2936,7 @@ DokuText::buildDrawText(const MultiLineLayout &layout,
   atlasSnapshot.summary.atlasPageCount = atlasSnapshot.pages.size();
   result.atlases.push_back(std::move(atlasSnapshot));
   result.summary.atlasPageCount = atlasCache.pages().size();
-  result.diagnosticsSummary =
-      buildDiagnosticsSummary(result.diagnostics, result.summary);
+  result.diagnosticsSummary = buildDiagnosticsSummary(result.diagnostics, result.summary);
   return result;
 }
 
@@ -4198,26 +4206,34 @@ TextSystem::seedAtlas(TextAtlas &atlas,
 PreparedTextLine
 TextSystem::prepareLine(TextAtlas &atlas, std::string_view text,
                         const TextPrepareOptions &options) const {
-  return prepareLine(atlas, makeAtlasBackedRequest(atlas.options(),
-                                                   std::string(text), options));
+  TextRequest request = makeAtlasBackedRequest(atlas.options(), std::string(text), options);
+  return prepareLine(atlas, request, options);
 }
 
 PreparedTextLine TextSystem::prepareLine(TextAtlas &atlas,
                                          const TextRequest &request) const {
+  return prepareLine(atlas, request, TextPrepareOptions{});
+}
+
+PreparedTextLine TextSystem::prepareLine(TextAtlas &atlas,
+                                         const TextRequest &request,
+                                         const TextPrepareOptions &options) const {
   PreparedTextLine result;
   result.layout = m_impl->m_renderer.layoutLine(request);
-  result.atlasUpdate = atlas.m_impl->m_cache.ensureGlyphs(result.layout);
-  atlas.m_impl->m_lastUpdate = result.atlasUpdate;
-  atlas.m_impl->m_lastUploadPlan =
-      buildAtlasPageUploadPlan(atlas.m_impl->m_cache, result.atlasUpdate);
-  result.atlasUploadPlan = atlas.m_impl->m_lastUploadPlan;
-  result.drawRun =
-      m_impl->m_renderer.buildDrawRun(result.layout, atlas.m_impl->m_cache);
+  if (options.allowGlyphAppend) {
+    result.atlasUpdate = atlas.m_impl->m_cache.ensureGlyphs(result.layout);
+    atlas.m_impl->m_lastUpdate = result.atlasUpdate;
+    atlas.m_impl->m_lastUploadPlan =
+        buildAtlasPageUploadPlan(atlas.m_impl->m_cache, result.atlasUpdate);
+    result.atlasUploadPlan = atlas.m_impl->m_lastUploadPlan;
+    result.drawRun = m_impl->m_renderer.buildDrawRun(result.layout, atlas.m_impl->m_cache);
+  } else {
+    result.drawRun = m_impl->m_renderer.buildDrawRun(result.layout, static_cast<const GlyphAtlasCache &>(atlas.cache()));
+  }
   result.compatibility = analyzeTextCompatibility(result.drawRun);
   result.submission = buildTextDrawSubmission(result.drawRun);
   result.diagnostics = collectPreparedDiagnostics(
-      result.layout.diagnostics, result.drawRun.diagnostics,
-      result.atlasUpdate.diagnostics);
+      result.layout.diagnostics, result.drawRun.diagnostics, result.atlasUpdate.diagnostics);
   result.missingGlyphs = collectMissingGlyphs(result.diagnostics);
   return result;
 }
@@ -4225,26 +4241,34 @@ PreparedTextLine TextSystem::prepareLine(TextAtlas &atlas,
 PreparedTextParagraph
 TextSystem::prepareText(TextAtlas &atlas, std::string_view text,
                         const TextPrepareOptions &options) const {
-  return prepareText(atlas, makeAtlasBackedRequest(atlas.options(),
-                                                   std::string(text), options));
+  TextRequest request = makeAtlasBackedRequest(atlas.options(), std::string(text), options);
+  return prepareText(atlas, request, options);
 }
 
 PreparedTextParagraph
 TextSystem::prepareText(TextAtlas &atlas, const TextRequest &request) const {
+  return prepareText(atlas, request, TextPrepareOptions{});
+}
+
+PreparedTextParagraph
+TextSystem::prepareText(TextAtlas &atlas, const TextRequest &request,
+                        const TextPrepareOptions &options) const {
   PreparedTextParagraph result;
   result.layout = m_impl->m_renderer.layoutText(request);
-  result.atlasUpdate = atlas.m_impl->m_cache.ensureGlyphs(result.layout);
-  atlas.m_impl->m_lastUpdate = result.atlasUpdate;
-  atlas.m_impl->m_lastUploadPlan =
-      buildAtlasPageUploadPlan(atlas.m_impl->m_cache, result.atlasUpdate);
-  result.atlasUploadPlan = atlas.m_impl->m_lastUploadPlan;
-  result.drawRun =
-      m_impl->m_renderer.buildDrawText(result.layout, atlas.m_impl->m_cache);
+  if (options.allowGlyphAppend) {
+    result.atlasUpdate = atlas.m_impl->m_cache.ensureGlyphs(result.layout);
+    atlas.m_impl->m_lastUpdate = result.atlasUpdate;
+    atlas.m_impl->m_lastUploadPlan =
+        buildAtlasPageUploadPlan(atlas.m_impl->m_cache, result.atlasUpdate);
+    result.atlasUploadPlan = atlas.m_impl->m_lastUploadPlan;
+    result.drawRun = m_impl->m_renderer.buildDrawText(result.layout, atlas.m_impl->m_cache);
+  } else {
+    result.drawRun = m_impl->m_renderer.buildDrawText(result.layout, static_cast<const GlyphAtlasCache &>(atlas.cache()));
+  }
   result.compatibility = analyzeTextCompatibility(result.drawRun);
   result.submission = buildTextDrawSubmission(result.drawRun);
   result.diagnostics = collectPreparedDiagnostics(
-      result.layout.diagnostics, result.drawRun.diagnostics,
-      result.atlasUpdate.diagnostics);
+      result.layout.diagnostics, result.drawRun.diagnostics, result.atlasUpdate.diagnostics);
   result.missingGlyphs = collectMissingGlyphs(result.diagnostics);
   return result;
 }
