@@ -6,6 +6,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -168,16 +169,13 @@ skewTransform(float xAngleRadians, float yAngleRadians, float cx, float cy) {
   return result;
 }
 
-[[nodiscard]] Vec2 makeVec(const FT_Vector &vector) {
-  return {static_cast<float>(vector.x) / 64.0F,
-          static_cast<float>(vector.y) / 64.0F};
-}
-
 [[nodiscard]] float dot(Vec2 a, Vec2 b) { return a.x * b.x + a.y * b.y; }
 
 [[nodiscard]] float lengthSquared(Vec2 value) { return dot(value, value); }
 
 [[nodiscard]] Vec2 subtract(Vec2 a, Vec2 b) { return {a.x - b.x, a.y - b.y}; }
+
+[[nodiscard]] float cross(Vec2 a, Vec2 b) { return a.x * b.y - a.y * b.x; }
 
 struct PremulRgba {
   float r = 0.0F;
@@ -481,6 +479,16 @@ resolveColor(const ColorPalette &palette, const FT_ColorIndex &colorIndex) {
   return mask;
 }
 
+[[nodiscard]] const uint8_t *bitmapRow(const FT_Bitmap &bitmap, int y) {
+  if (bitmap.pitch >= 0) {
+    return bitmap.buffer +
+           static_cast<std::size_t>(y) * static_cast<std::size_t>(bitmap.pitch);
+  }
+  const int invertedRow = static_cast<int>(bitmap.rows) - 1 - y;
+  return bitmap.buffer + static_cast<std::size_t>(invertedRow) *
+                             static_cast<std::size_t>(-bitmap.pitch);
+}
+
 [[nodiscard]] std::vector<GradientStop>
 collectGradientStops(FT_Face face, const FT_ColorLine &colorLine,
                      const ColorPalette &palette) {
@@ -771,6 +779,10 @@ public:
       : m_face(face), m_palette(palette), m_bounds(bounds), m_advance(advance),
         m_bearingX(bearingX), m_bearingY(bearingY), m_options(options),
         m_stats(stats) {
+    if (m_face->size != nullptr && m_face->units_per_EM > 0) {
+      m_fontScaleX = fixed16Dot16ToFloat(m_face->size->metrics.x_scale);
+      m_fontScaleY = fixed16Dot16ToFloat(m_face->size->metrics.y_scale);
+    }
     m_width = std::max(bounds.maxX - bounds.minX, 1);
     m_height = std::max(bounds.maxY - bounds.minY, 1);
     m_originY = bounds.maxY;
@@ -888,11 +900,11 @@ private:
   void paintTransform(const FT_PaintTransform &transform) {
     const AffineTransform matrix = {
         fixed16Dot16ToFloat(transform.affine.xx),
-        fixed16Dot16ToFloat(transform.affine.xy),
-        fixed16Dot16ToFloat(transform.affine.yx),
+        fixed16Dot16ToFloat(transform.affine.xy) * transformScaleXOverY(),
+        fixed16Dot16ToFloat(transform.affine.yx) * transformScaleYOverX(),
         fixed16Dot16ToFloat(transform.affine.yy),
-        fixed16Dot16ToFloat(transform.affine.dx),
-        fixed16Dot16ToFloat(transform.affine.dy),
+        affineTranslateX(transform.affine.dx),
+        affineTranslateY(transform.affine.dy),
     };
     pushTransform(matrix);
     paint(transform.paint);
@@ -901,7 +913,7 @@ private:
 
   void paintTranslate(const FT_PaintTranslate &translate) {
     const AffineTransform transform = translateTransform(
-        fixed16Dot16ToFloat(translate.dx), fixed16Dot16ToFloat(translate.dy));
+        fixedCoordX(translate.dx), fixedCoordY(translate.dy));
     pushTransform(transform);
     paint(translate.paint);
     popTransform();
@@ -910,8 +922,7 @@ private:
   void paintScale(const FT_PaintScale &scale) {
     const AffineTransform transform = scaleTransform(
         fixed16Dot16ToFloat(scale.scale_x), fixed16Dot16ToFloat(scale.scale_y),
-        fixed16Dot16ToFloat(scale.center_x),
-        fixed16Dot16ToFloat(scale.center_y));
+        fixedCoordX(scale.center_x), fixedCoordY(scale.center_y));
     pushTransform(transform);
     paint(scale.paint);
     popTransform();
@@ -921,8 +932,8 @@ private:
     const float angleDegrees = fixed16Dot16ToFloat(rotate.angle) * 180.0F;
     const float angleRadians = angleDegrees * (kPi / 180.0F);
     const AffineTransform transform =
-        rotateTransform(angleRadians, fixed16Dot16ToFloat(rotate.center_x),
-                        fixed16Dot16ToFloat(rotate.center_y));
+        rotateTransform(angleRadians, fixedCoordX(rotate.center_x),
+                        fixedCoordY(rotate.center_y));
     pushTransform(transform);
     paint(rotate.paint);
     popTransform();
@@ -933,7 +944,7 @@ private:
     const float yAngleDegrees = fixed16Dot16ToFloat(skew.y_skew_angle) * 180.0F;
     const AffineTransform transform = skewTransform(
         xAngleDegrees * (kPi / 180.0F), yAngleDegrees * (kPi / 180.0F),
-        fixed16Dot16ToFloat(skew.center_x), fixed16Dot16ToFloat(skew.center_y));
+        fixedCoordX(skew.center_x), fixedCoordY(skew.center_y));
     pushTransform(transform);
     paint(skew.paint);
     popTransform();
@@ -958,13 +969,14 @@ private:
       return;
     }
     const AffineTransform inverse = invert(m_transformStack.back());
-    const Vec2 p0 = makeVec(gradient.p0);
-    const Vec2 p1 = makeVec(gradient.p1);
-    const Vec2 p2 = makeVec(gradient.p2);
+    const Vec2 p0 = fixedVec(gradient.p0);
+    const Vec2 p1 = fixedVec(gradient.p1);
+    const Vec2 p2 = fixedVec(gradient.p2);
     const Vec2 axis = subtract(p1, p0);
-    const float axisLenSq = lengthSquared(axis);
-    if (axisLenSq <= 1e-6F) {
-      blendSolid(stops.front().color);
+    const Vec2 projection = subtract(p2, p0);
+    const float determinant = cross(axis, projection);
+    if (lengthSquared(axis) <= 1e-6F || lengthSquared(projection) <= 1e-6F ||
+        std::fabs(determinant) <= 1e-6F) {
       return;
     }
     for (int y = 0; y < m_height; ++y) {
@@ -977,7 +989,8 @@ private:
         }
         const Vec2 devicePoint = pixelToDevice(x, y, m_bounds);
         const Vec2 localPoint = apply(inverse, devicePoint);
-        const float position = dot(subtract(localPoint, p2), axis) / axisLenSq;
+        const float position =
+            cross(subtract(localPoint, p0), projection) / determinant;
         const auto color =
             sampleColorLine(position, stops, gradient.colorline.extend);
         accumulateColor(idx, coverage, color);
@@ -993,10 +1006,10 @@ private:
       return;
     }
     const AffineTransform inverse = invert(m_transformStack.back());
-    const Vec2 c0 = makeVec(gradient.c0);
-    const Vec2 c1 = makeVec(gradient.c1);
-    const float r0 = static_cast<float>(gradient.r0) / 64.0F;
-    const float r1 = static_cast<float>(gradient.r1) / 64.0F;
+    const Vec2 c0 = fixedVec(gradient.c0);
+    const Vec2 c1 = fixedVec(gradient.c1);
+    const float r0 = fixedCoordX(static_cast<FT_Fixed>(gradient.r0));
+    const float r1 = fixedCoordX(static_cast<FT_Fixed>(gradient.r1));
     for (int y = 0; y < m_height; ++y) {
       for (int x = 0; x < m_width; ++x) {
         const std::size_t idx = static_cast<std::size_t>(y * m_width + x);
@@ -1023,7 +1036,7 @@ private:
       return;
     }
     const AffineTransform inverse = invert(m_transformStack.back());
-    const Vec2 center = makeVec(gradient.center);
+    const Vec2 center = fixedVec(gradient.center);
     float startAngle = fixed16Dot16ToFloat(gradient.start_angle) * kPi;
     float endAngle = fixed16Dot16ToFloat(gradient.end_angle) * kPi;
     startAngle = normalizeAngle(startAngle);
@@ -1051,7 +1064,7 @@ private:
           accumulateColor(idx, coverage, stops.front().color);
           continue;
         }
-        const float angle = normalizeAngle(std::atan2(dx, dy));
+        const float angle = normalizeAngle(std::atan2(-dx, dy));
         float relative = angle - startAngle;
         if (relative < 0.0F) {
           relative += 2.0F * kPi;
@@ -1204,8 +1217,7 @@ private:
       if (targetY < 0 || targetY >= m_height) {
         continue;
       }
-      const uint8_t *srcRow =
-          bitmap.buffer + static_cast<std::size_t>(y) * bitmap.pitch;
+      const uint8_t *srcRow = bitmapRow(bitmap, y);
       for (int x = 0; x < static_cast<int>(bitmap.width); ++x) {
         const int targetX = destX + x;
         if (targetX < 0 || targetX >= m_width) {
@@ -1222,8 +1234,8 @@ private:
   void pushGroup() {
     bump(m_stats ? &m_stats->m_groupPushes : nullptr);
     m_targetStack.push_back(m_currentTargetPtr);
-    m_groupStack.emplace_back();
-    Bitmap &bitmap = m_groupStack.back();
+    m_groupStack.push_back(std::make_unique<Bitmap>());
+    Bitmap &bitmap = *m_groupStack.back();
     bitmap.resize(m_width, m_height);
     bitmap.clear(0U, 0U, 0U, 0U);
     m_currentTargetPtr = &bitmap;
@@ -1234,7 +1246,7 @@ private:
     if (m_groupStack.empty() || m_targetStack.empty()) {
       throw std::runtime_error("グループスタックの整合性が崩れています");
     }
-    Bitmap result = std::move(m_groupStack.back());
+    Bitmap result = std::move(*m_groupStack.back());
     m_groupStack.pop_back();
     m_currentTargetPtr = m_targetStack.back();
     m_targetStack.pop_back();
@@ -1298,6 +1310,41 @@ private:
     }
   }
 
+  [[nodiscard]] float fixedCoordX(FT_Fixed value) const {
+    return fixed16Dot16ToFloat(value) * m_fontScaleX;
+  }
+
+  [[nodiscard]] float fixedCoordY(FT_Fixed value) const {
+    return fixed16Dot16ToFloat(value) * m_fontScaleY;
+  }
+
+  [[nodiscard]] Vec2 fixedVec(const FT_Vector &vector) const {
+    return {fixedCoordX(static_cast<FT_Fixed>(vector.x)),
+            fixedCoordY(static_cast<FT_Fixed>(vector.y))};
+  }
+
+  [[nodiscard]] float affineTranslateX(FT_Fixed value) const {
+    return fixed16Dot16ToFloat(value) / 64.0F * m_fontScaleX;
+  }
+
+  [[nodiscard]] float affineTranslateY(FT_Fixed value) const {
+    return fixed16Dot16ToFloat(value) / 64.0F * m_fontScaleY;
+  }
+
+  [[nodiscard]] float transformScaleXOverY() const {
+    if (std::fabs(m_fontScaleY) <= 1e-6F) {
+      return 1.0F;
+    }
+    return m_fontScaleX / m_fontScaleY;
+  }
+
+  [[nodiscard]] float transformScaleYOverX() const {
+    if (std::fabs(m_fontScaleX) <= 1e-6F) {
+      return 1.0F;
+    }
+    return m_fontScaleY / m_fontScaleX;
+  }
+
   void accumulateColor(std::size_t pixelIndex, float coverage,
                        const std::array<uint8_t, 4> &color) {
     if (coverage <= 0.0F) {
@@ -1340,12 +1387,14 @@ private:
   int m_originY = 0;
   int m_recursionDepth = 0;
   int m_traceDepth = 0;
+  float m_fontScaleX = 1.0F;
+  float m_fontScaleY = 1.0F;
 
   Bitmap m_target;
   AlphaMask m_clipMask;
   std::vector<AlphaMask> m_clipStack;
   std::vector<AffineTransform> m_transformStack;
-  std::vector<Bitmap> m_groupStack;
+  std::vector<std::unique_ptr<Bitmap>> m_groupStack;
   std::vector<Bitmap *> m_targetStack;
   Bitmap *m_currentTargetPtr = nullptr;
   ColrV1RenderOptions m_options;

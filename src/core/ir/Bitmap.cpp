@@ -31,10 +31,10 @@ void Bitmap::clear(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     return;
   }
   for (int y = 0; y < m_height; ++y) {
-    auto *row = m_rgba.data() + static_cast<std::size_t>(y) * kBytesPerPixel *
+    auto *row = m_rgba.data() + static_cast<std::size_t>(y) * BYTES_PER_PIXEL *
                                     static_cast<std::size_t>(m_width);
     for (int x = 0; x < m_width; ++x) {
-      auto *pixel = row + static_cast<std::size_t>(x) * kBytesPerPixel;
+      auto *pixel = row + static_cast<std::size_t>(x) * BYTES_PER_PIXEL;
       pixel[0] = r;
       pixel[1] = g;
       pixel[2] = b;
@@ -56,19 +56,19 @@ void Bitmap::blit(const Bitmap &source, int offsetX, int offsetY) {
       continue;
     }
     auto *dstRow = m_rgba.data() + static_cast<std::size_t>(dy) *
-                                       kBytesPerPixel *
+                                       BYTES_PER_PIXEL *
                                        static_cast<std::size_t>(m_width);
     const auto *srcRow =
-        source.m_rgba.data() + static_cast<std::size_t>(sy) * kBytesPerPixel *
+        source.m_rgba.data() + static_cast<std::size_t>(sy) * BYTES_PER_PIXEL *
                                    static_cast<std::size_t>(source.m_width);
     for (int sx = 0; sx < source.m_width; ++sx) {
       const int dx = sx + offsetX;
       if (dx < 0 || dx >= m_width) {
         continue;
       }
-      auto *dstPixel = dstRow + static_cast<std::size_t>(dx) * kBytesPerPixel;
+      auto *dstPixel = dstRow + static_cast<std::size_t>(dx) * BYTES_PER_PIXEL;
       const auto *srcPixel =
-          srcRow + static_cast<std::size_t>(sx) * kBytesPerPixel;
+          srcRow + static_cast<std::size_t>(sx) * BYTES_PER_PIXEL;
 
       const float srcAlpha =
           static_cast<float>(srcPixel[3]) / static_cast<float>(UINT8_MAX);

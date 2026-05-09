@@ -2,6 +2,10 @@ function(add_dokutext_test target_name source_file)
   add_executable(${target_name} ${source_file})
   target_link_libraries(${target_name} PRIVATE DokuText::DokuText)
   target_compile_features(${target_name} PRIVATE cxx_std_20)
+  add_test(NAME ${target_name} COMMAND ${target_name})
+  set_tests_properties(
+    ${target_name} PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  )
 
   if(WIN32)
     target_compile_definitions(
@@ -14,6 +18,10 @@ add_dokutext_test(DokuTextTestSmoke SmokeCliTest.cpp)
 add_dokutext_test(DokuTextTestRenderTextApi RenderTextApiTest.cpp)
 add_dokutext_test(DokuTextTestMetricsLog MetricsLogTest.cpp)
 add_dokutext_test(DokuTextTestScanLog ScanLogTest.cpp)
+add_dokutext_test(
+  DokuTextTestColrV1GradientRender
+  ColrV1GradientRenderTest.cpp
+)
 add_dokutext_test(
   DokuTextTestFallbackDiagnostics
   FallbackDiagnosticsTest.cpp
@@ -53,4 +61,7 @@ target_include_directories(
 )
 target_include_directories(
   DokuTextTestBakedAtlasPng PRIVATE ${CMAKE_SOURCE_DIR}/src
+)
+target_include_directories(
+  DokuTextTestColrV1GradientRender PRIVATE ${CMAKE_SOURCE_DIR}/src
 )
