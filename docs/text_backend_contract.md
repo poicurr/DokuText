@@ -139,12 +139,58 @@ DokuText does not premultiply atlas texels.
 - Calls `UiFontAtlas` for text preparation.
 - Does not directly handle rasterization.
 
+## 9. Runtime TextInput Support
+
+`PreparedTextLine` / `TextLineLayout` expose single-line caret and hit-test data
+for DokuEngine runtime UI TextInput.
+
+Public API:
+
+- `caretBoundaries(...)`
+  - returns line-local caret boundaries in ascending X order.
+  - includes start and end boundaries.
+  - returns one `{byteOffset=0, x=0}` boundary for an empty line.
+- `hitTestTextLine(...)`
+  - maps a line-local X coordinate to the nearest caret boundary.
+  - clamps before the line start and after the line end.
+  - uses cluster midpoint selection.
+- `caretForByteOffset(...)` / `caretXForByteOffset(...)`
+  - maps a UTF-8 byte offset to a valid caret boundary.
+  - invalid byte offsets inside a UTF-8 sequence or text cluster are clamped to
+    the nearest valid boundary.
+- `selectionRectsForByteRange(...)`
+  - returns zero or one line-local rect for a single-line byte range.
+  - begin/end offsets are normalized and clamped through the caret boundary API.
+
+`TextLineLayout::clusters` stores cluster byte ranges and line-local X ranges.
+`TextLineLayout::caretBoundaries` is derived from these layout results, so
+fallback font changes, color glyphs, and atlas page assignment do not require
+DokuEngine-side glyph advance reconstruction.
+
+Supported scope:
+
+- `PreparedTextLine` / single-line `TextLineLayout`.
+- UTF-8 byte offsets at DokuText-produced caret boundaries.
+- Existing DokuText emoji clustering, including supported ZWJ sequences.
+- Fallback font and color glyph layout produced by DokuText.
+
+Unsupported or future scope:
+
+- bidi / RTL caret behavior.
+- vertical text.
+- IME composition geometry.
+- multi-line paragraph hit-test and editor selection.
+- full Unicode grapheme segmentation. DokuText currently groups emoji joiners,
+  variation selectors, emoji modifiers, keycap combiners, tag code points, and
+  regional indicator pairs, but does not implement the full Unicode grapheme
+  break algorithm.
+
 ### Renderer
 - Consumes draw commands and atlas textures.
 - Performs actual GPU uploads (OpenGL/Dawn).
 - Does not need to know about font fallback or shaping details.
 
-## 9. Dynamic Glyph Append Direction
+## 10. Dynamic Glyph Append Direction
 
 ### Current DokuText behavior
 
@@ -166,7 +212,7 @@ DokuEngine integration should add a budgeted scheduling layer over this capabili
 - dirty-rect GPU upload based on atlas upload plans
 - non-permanent missing glyph cache state
 
-## 10. Revision Model
+## 11. Revision Model
 
 ### Current
 
@@ -188,7 +234,7 @@ DokuEngine integration should distinguish two revision concepts:
 
 Missing glyph states must not be permanently cached because fallback chains, font reloads, atlas updates, or dynamic append may later resolve them.
 
-## 11. Migration Plan
+## 12. Migration Plan
 
 - **Phase A: Documentation & Naming**
   - Repository name DokuText.

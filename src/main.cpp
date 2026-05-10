@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <sstream>
@@ -93,6 +94,8 @@ struct RenderTarget {
 
 struct TextCluster {
   std::vector<std::uint32_t> m_codePoints;
+  std::size_t m_beginByteOffset = 0;
+  std::size_t m_endByteOffset = 0;
 };
 
 struct ShapedGlyph {
@@ -477,16 +480,33 @@ encodeUtf8(const std::vector<std::uint32_t> &codePoints) {
                                   &opaquePaint) != 0;
 }
 
+[[nodiscard]] std::size_t utf8Length(std::uint32_t codePoint) {
+  if (codePoint <= 0x7FU) {
+    return 1;
+  }
+  if (codePoint <= 0x7FFU) {
+    return 2;
+  }
+  if (codePoint <= 0xFFFFU) {
+    return 3;
+  }
+  return 4;
+}
+
 [[nodiscard]] std::vector<TextCluster>
 clusterText(const std::vector<std::uint32_t> &codePoints) {
   std::vector<TextCluster> clusters;
+  std::size_t byteOffset = 0;
   for (std::size_t i = 0; i < codePoints.size();) {
     TextCluster cluster;
-    cluster.m_codePoints.push_back(codePoints[i++]);
+    cluster.m_beginByteOffset = byteOffset;
+    cluster.m_codePoints.push_back(codePoints[i]);
+    byteOffset += utf8Length(codePoints[i++]);
 
     if (isRegionalIndicator(cluster.m_codePoints.front()) &&
         i < codePoints.size() && isRegionalIndicator(codePoints[i])) {
-      cluster.m_codePoints.push_back(codePoints[i++]);
+      cluster.m_codePoints.push_back(codePoints[i]);
+      byteOffset += utf8Length(codePoints[i++]);
     }
 
     while (i < codePoints.size()) {
@@ -494,18 +514,22 @@ clusterText(const std::vector<std::uint32_t> &codePoints) {
       if (isVariationSelector(codePoint) || isEmojiModifier(codePoint) ||
           isKeycapCombiner(codePoint) || isTagCodePoint(codePoint)) {
         cluster.m_codePoints.push_back(codePoint);
+        byteOffset += utf8Length(codePoint);
         ++i;
         continue;
       }
       if (isEmojiJoiner(codePoint) && i + 1U < codePoints.size()) {
         cluster.m_codePoints.push_back(codePoint);
+        byteOffset += utf8Length(codePoint);
         cluster.m_codePoints.push_back(codePoints[i + 1U]);
+        byteOffset += utf8Length(codePoints[i + 1U]);
         i += 2U;
         continue;
       }
       break;
     }
 
+    cluster.m_endByteOffset = byteOffset;
     clusters.push_back(std::move(cluster));
   }
   return clusters;
@@ -1377,6 +1401,7 @@ joinClusterText(const std::vector<ShapedCluster> &clusters) {
                                                std::size_t endCluster) {
   TextShapeResult result;
   if (beginCluster >= endCluster || endCluster > source.clusters.size()) {
+    result.text.clear();
     result.metrics = source.metrics;
     result.metrics.lineWidth = 0;
     result.diagnosticsSummary =
@@ -1397,6 +1422,7 @@ joinClusterText(const std::vector<ShapedCluster> &clusters) {
     result.metrics.lineWidth += computeClusterAdvance(cluster);
     result.clusters.push_back(std::move(cluster));
   }
+  result.text = joinClusterText(result.clusters);
 
   for (const FallbackTraceEntry &trace : source.fallbackTrace) {
     if (trace.clusterIndex < beginCluster || trace.clusterIndex >= endCluster) {
@@ -1548,6 +1574,27 @@ void assignLineIndex(std::vector<Diagnostic> &diagnostics,
   for (Diagnostic &diagnostic : diagnostics) {
     diagnostic.lineIndex = lineIndex;
   }
+}
+
+[[nodiscard]] std::vector<TextCaretBoundary>
+buildCaretBoundaries(const TextLineLayout &line) {
+  std::vector<TextCaretBoundary> boundaries;
+  boundaries.reserve(line.clusters.size() + 1U);
+  if (line.clusters.empty()) {
+    boundaries.push_back({0U, 0.0F, 0U, true});
+    return boundaries;
+  }
+
+  const TextClusterLayout &firstCluster = line.clusters.front();
+  boundaries.push_back(
+      {firstCluster.beginByteOffset, firstCluster.xMin, 0U, true});
+  for (std::size_t clusterIndex = 0; clusterIndex < line.clusters.size();
+       ++clusterIndex) {
+    const TextClusterLayout &cluster = line.clusters[clusterIndex];
+    boundaries.push_back({cluster.endByteOffset, cluster.xMax,
+                          static_cast<std::uint32_t>(clusterIndex), false});
+  }
+  return boundaries;
 }
 
 [[nodiscard]] TextLayoutContext
@@ -1722,6 +1769,7 @@ public:
       throw std::invalid_argument("text が空です");
     }
     TextShapeResult result;
+    result.text = std::string(text);
     const std::vector<ResolvedShapedCluster> shapedClusters =
         shapeClusters(layoutContext, text, result.diagnostics, result.metrics);
     result.clusters.reserve(shapedClusters.size());
@@ -1730,6 +1778,8 @@ public:
       const ResolvedShapedCluster &cluster = shapedClusters[clusterIndex];
       ShapedCluster shapedCluster;
       shapedCluster.text = encodeUtf8(cluster.cluster.m_codePoints);
+      shapedCluster.beginByteOffset = cluster.cluster.m_beginByteOffset;
+      shapedCluster.endByteOffset = cluster.cluster.m_endByteOffset;
       shapedCluster.codePoints = cluster.cluster.m_codePoints;
       shapedCluster.fontPath = cluster.font->m_path;
       shapedCluster.requestedRole = cluster.requestedRole;
@@ -1807,6 +1857,7 @@ public:
     std::vector<const FontContext *> usedFonts;
 
     TextRasterResult result;
+    result.text = shape.text;
     result.diagnostics = shape.diagnostics;
     result.fallbackTrace = shape.fallbackTrace;
 
@@ -1825,6 +1876,15 @@ public:
         shapedGlyphs.push_back({glyph.glyphId, glyph.xAdvance, glyph.yAdvance,
                                 glyph.xOffset, glyph.yOffset});
       }
+      const int clusterAdvance = computeShapedAdvance(shapedGlyphs);
+      TextClusterLayout clusterLayout;
+      clusterLayout.beginByteOffset = cluster.beginByteOffset;
+      clusterLayout.endByteOffset = cluster.endByteOffset;
+      clusterLayout.xMin = static_cast<float>(penX);
+      clusterLayout.xMax = static_cast<float>(penX + clusterAdvance);
+      clusterLayout.glyphBegin =
+          static_cast<std::uint32_t>(tempClusters.size());
+      clusterLayout.glyphEnd = clusterLayout.glyphBegin;
 
       ClusterRenderResult clusterResult;
       try {
@@ -1843,7 +1903,8 @@ public:
         diagnostic.codePoints = textCluster.m_codePoints;
         diagnostic.fontPath = font.m_path;
         result.diagnostics.push_back(std::move(diagnostic));
-        penX += computeShapedAdvance(shapedGlyphs);
+        result.clusters.push_back(clusterLayout);
+        penX += clusterAdvance;
         continue;
       }
       if (layoutContext.verifyMetrics &&
@@ -1858,12 +1919,14 @@ public:
         result.diagnostics.push_back(std::move(diagnostic));
       }
 
+      clusterLayout.glyphEnd = clusterLayout.glyphBegin + 1U;
+      result.clusters.push_back(clusterLayout);
       tempClusters.push_back(
           {std::move(clusterResult), textCluster, &font, clusterIndex, penX,
            cluster.glyphs.empty() ? false : cluster.glyphs.front().isColorGlyph,
            cluster.fallbackApplied});
       usedFonts.push_back(&font);
-      penX += computeShapedAdvance(shapedGlyphs);
+      penX += clusterAdvance;
     }
 
     result.metrics = buildLineMetrics(
@@ -1970,6 +2033,8 @@ public:
 
   TextLineLayout layoutLine(const TextRasterResult &raster) const {
     TextLineLayout result;
+    result.text = raster.text;
+    result.clusters = raster.clusters;
     result.metrics = raster.metrics;
     result.summary = raster.summary;
     result.fallbackTrace = raster.fallbackTrace;
@@ -1995,6 +2060,7 @@ public:
       result.glyphs.push_back(std::move(glyph));
     }
     result.summary = summarizeLayout(result);
+    result.caretBoundaries = buildCaretBoundaries(result);
     result.diagnosticsSummary =
         buildDiagnosticsSummary(result.diagnostics, result.summary);
     return result;
@@ -2003,7 +2069,7 @@ public:
   TextLineLayout layoutLine(const TextLayoutContext &layoutContext,
                             std::string_view text) const {
     if (text.empty()) {
-      throw std::invalid_argument("text が空です");
+      return makeEmptyLineLayout(layoutContext);
     }
     const TextShapeResult shape = shapeLine(layoutContext, text);
     const TextRasterResult raster = rasterizeLine(layoutContext, shape);
@@ -2217,6 +2283,7 @@ private:
   [[nodiscard]] TextShapeResult
   makeEmptyLineShape(const TextLayoutContext &layoutContext) const {
     TextShapeResult result;
+    result.text.clear();
     const FontFallbackChain fallbackChain = resolveFallbackChain(layoutContext);
     const std::string fontPath = selectMetricsFontPath(fallbackChain);
 
@@ -4236,6 +4303,7 @@ TextSystem::prepareLine(TextAtlas &atlas, const TextRequest &request,
     result.drawRun = m_impl->m_renderer.buildDrawRun(
         result.layout, static_cast<const GlyphAtlasCache &>(atlas.cache()));
   }
+  result.caretBoundaries = result.layout.caretBoundaries;
   result.compatibility = analyzeTextCompatibility(result.drawRun);
   result.submission = buildTextDrawSubmission(result.drawRun);
   result.diagnostics = collectPreparedDiagnostics(
@@ -4331,6 +4399,7 @@ PreparedTextLine TextSystem::layoutTextLine(const BakedTextAtlas &atlas,
 
   result.drawRun.diagnosticsSummary = buildDiagnosticsSummary(
       result.drawRun.diagnostics, result.drawRun.summary);
+  result.caretBoundaries = result.layout.caretBoundaries;
   result.compatibility = analyzeTextCompatibility(result.drawRun);
   result.submission = buildTextDrawSubmission(result.drawRun);
   result.diagnostics = result.drawRun.diagnostics;
@@ -4907,6 +4976,129 @@ int runCli(int argc, char *argv[]) {
     args.emplace_back(argv[i]);
   }
   return runCli(args);
+}
+
+std::span<const TextCaretBoundary> caretBoundaries(const TextLineLayout &line) {
+  return line.caretBoundaries;
+}
+
+std::span<const TextCaretBoundary>
+caretBoundaries(const PreparedTextLine &line) {
+  if (!line.caretBoundaries.empty()) {
+    return line.caretBoundaries;
+  }
+  return caretBoundaries(line.layout);
+}
+
+TextHitTestResult hitTestTextLine(const TextLineLayout &line, float x) {
+  const std::span<const TextCaretBoundary> boundaries = caretBoundaries(line);
+  if (boundaries.empty()) {
+    return {};
+  }
+  if (x <= boundaries.front().x) {
+    return {boundaries.front().byteOffset, 0U, boundaries.front().x};
+  }
+  const std::uint32_t lastIndex =
+      static_cast<std::uint32_t>(boundaries.size() - 1U);
+  if (x >= boundaries.back().x) {
+    return {boundaries.back().byteOffset, lastIndex, boundaries.back().x};
+  }
+  for (std::size_t index = 0; index + 1U < boundaries.size(); ++index) {
+    const TextCaretBoundary &left = boundaries[index];
+    const TextCaretBoundary &right = boundaries[index + 1U];
+    const float midpoint = (left.x + right.x) * 0.5F;
+    if (x < midpoint) {
+      return {left.byteOffset, static_cast<std::uint32_t>(index), left.x};
+    }
+    if (x <= right.x) {
+      return {right.byteOffset, static_cast<std::uint32_t>(index + 1U),
+              right.x};
+    }
+  }
+  return {boundaries.back().byteOffset, lastIndex, boundaries.back().x};
+}
+
+TextHitTestResult hitTestTextLine(const PreparedTextLine &line, float x) {
+  return hitTestTextLine(line.layout, x);
+}
+
+TextHitTestResult caretForByteOffset(const TextLineLayout &line,
+                                     std::size_t byteOffset) {
+  const std::span<const TextCaretBoundary> boundaries = caretBoundaries(line);
+  if (boundaries.empty()) {
+    return {};
+  }
+  if (byteOffset <= boundaries.front().byteOffset) {
+    return {boundaries.front().byteOffset, 0U, boundaries.front().x};
+  }
+  const std::uint32_t lastIndex =
+      static_cast<std::uint32_t>(boundaries.size() - 1U);
+  if (byteOffset >= boundaries.back().byteOffset) {
+    return {boundaries.back().byteOffset, lastIndex, boundaries.back().x};
+  }
+
+  const auto lower = std::lower_bound(
+      boundaries.begin(), boundaries.end(), byteOffset,
+      [](const TextCaretBoundary &boundary, std::size_t offset) {
+        return boundary.byteOffset < offset;
+      });
+  if (lower != boundaries.end() && lower->byteOffset == byteOffset) {
+    const std::size_t index =
+        static_cast<std::size_t>(std::distance(boundaries.begin(), lower));
+    return {lower->byteOffset, static_cast<std::uint32_t>(index), lower->x};
+  }
+
+  const auto upper = lower;
+  const auto previous = std::prev(lower);
+  const std::size_t previousDistance = byteOffset - previous->byteOffset;
+  const std::size_t upperDistance = upper->byteOffset - byteOffset;
+  const auto chosen = previousDistance <= upperDistance ? previous : upper;
+  const std::size_t index =
+      static_cast<std::size_t>(std::distance(boundaries.begin(), chosen));
+  return {chosen->byteOffset, static_cast<std::uint32_t>(index), chosen->x};
+}
+
+TextHitTestResult caretForByteOffset(const PreparedTextLine &line,
+                                     std::size_t byteOffset) {
+  return caretForByteOffset(line.layout, byteOffset);
+}
+
+float caretXForByteOffset(const TextLineLayout &line, std::size_t byteOffset) {
+  return caretForByteOffset(line, byteOffset).caretX;
+}
+
+float caretXForByteOffset(const PreparedTextLine &line,
+                          std::size_t byteOffset) {
+  return caretForByteOffset(line, byteOffset).caretX;
+}
+
+std::vector<TextSelectionRect>
+selectionRectsForByteRange(const TextLineLayout &line,
+                           std::size_t beginByteOffset,
+                           std::size_t endByteOffset) {
+  if (beginByteOffset > endByteOffset) {
+    std::swap(beginByteOffset, endByteOffset);
+  }
+  const TextHitTestResult begin = caretForByteOffset(line, beginByteOffset);
+  const TextHitTestResult end = caretForByteOffset(line, endByteOffset);
+  if (begin.byteOffset == end.byteOffset || begin.caretX == end.caretX) {
+    return {};
+  }
+
+  const float x = std::min(begin.caretX, end.caretX);
+  const float right = std::max(begin.caretX, end.caretX);
+  const float height = static_cast<float>(
+      std::max(1, std::max(line.metrics.ascent + line.metrics.descent,
+                           static_cast<int>(line.metrics.pixelSize))));
+  return {{x, 0.0F, right - x, height}};
+}
+
+std::vector<TextSelectionRect>
+selectionRectsForByteRange(const PreparedTextLine &line,
+                           std::size_t beginByteOffset,
+                           std::size_t endByteOffset) {
+  return selectionRectsForByteRange(line.layout, beginByteOffset,
+                                    endByteOffset);
 }
 
 } // namespace doku::text

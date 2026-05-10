@@ -134,6 +134,10 @@ enum class DiagnosticCode {
   AsciiConstraintViolation,
   BakeBudgetExceeded,
   BakedAtlasMismatch,
+  InvalidCaretOffset,
+  UnsupportedGraphemeClusterSplit,
+  HitTestClusterFallback,
+  SelectionRangeClamped,
 };
 
 [[nodiscard]] constexpr std::string_view toString(DiagnosticCode code) {
@@ -164,6 +168,14 @@ enum class DiagnosticCode {
       return "BakeBudgetExceeded";
     case DiagnosticCode::BakedAtlasMismatch:
       return "BakedAtlasMismatch";
+    case DiagnosticCode::InvalidCaretOffset:
+      return "InvalidCaretOffset";
+    case DiagnosticCode::UnsupportedGraphemeClusterSplit:
+      return "UnsupportedGraphemeClusterSplit";
+    case DiagnosticCode::HitTestClusterFallback:
+      return "HitTestClusterFallback";
+    case DiagnosticCode::SelectionRangeClamped:
+      return "SelectionRangeClamped";
   }
   return "Unknown";
 }
@@ -375,6 +387,8 @@ struct ShapedGlyphInfo {
 
 struct ShapedCluster {
   std::string text;
+  std::size_t beginByteOffset = 0;
+  std::size_t endByteOffset = 0;
   std::vector<std::uint32_t> codePoints;
   std::vector<ShapedGlyphInfo> glyphs;
   std::string fontPath;
@@ -396,12 +410,42 @@ struct FallbackTraceEntry {
 };
 
 struct TextShapeResult {
+  std::string text;
   std::vector<ShapedCluster> clusters;
   LineMetrics metrics;
   LineSummary summary;
   DiagnosticsSummary diagnosticsSummary;
   std::vector<FallbackTraceEntry> fallbackTrace;
   std::vector<Diagnostic> diagnostics;
+};
+
+struct TextClusterLayout {
+  std::size_t beginByteOffset = 0;
+  std::size_t endByteOffset = 0;
+  float xMin = 0.0F;
+  float xMax = 0.0F;
+  std::uint32_t glyphBegin = 0;
+  std::uint32_t glyphEnd = 0;
+};
+
+struct TextCaretBoundary {
+  std::size_t byteOffset = 0;
+  float x = 0.0F;
+  std::uint32_t clusterIndex = 0;
+  bool leading = true;
+};
+
+struct TextHitTestResult {
+  std::size_t byteOffset = 0;
+  std::uint32_t boundaryIndex = 0;
+  float caretX = 0.0F;
+};
+
+struct TextSelectionRect {
+  float x = 0.0F;
+  float y = 0.0F;
+  float width = 0.0F;
+  float height = 0.0F;
 };
 
 struct RasterizedGlyph {
@@ -418,7 +462,9 @@ struct RasterizedGlyph {
 };
 
 struct TextRasterResult {
+  std::string text;
   std::vector<RasterizedGlyph> glyphs;
+  std::vector<TextClusterLayout> clusters;
   LineMetrics metrics;
   LineSummary summary;
   DiagnosticsSummary diagnosticsSummary;
@@ -451,7 +497,10 @@ struct MultiLineRasterResult {
 };
 
 struct TextLineLayout {
+  std::string text;
   std::vector<PositionedGlyph> glyphs;
+  std::vector<TextClusterLayout> clusters;
+  std::vector<TextCaretBoundary> caretBoundaries;
   LineMetrics metrics;
   LineSummary summary;
   DiagnosticsSummary diagnosticsSummary;
@@ -927,6 +976,7 @@ struct TextAtlasSeedResult {
 struct PreparedTextLine {
   TextLineLayout layout;
   TextDrawRun drawRun;
+  std::vector<TextCaretBoundary> caretBoundaries;
   TextDrawSubmission submission;
   TextCompatibilityReport compatibility;
   GlyphAtlasCacheUpdate atlasUpdate;
@@ -1144,6 +1194,40 @@ private:
 int runCli(const std::vector<std::string> &args);
 
 int runCli(int argc, char *argv[]);
+
+[[nodiscard]] std::span<const TextCaretBoundary>
+caretBoundaries(const TextLineLayout &line);
+
+[[nodiscard]] std::span<const TextCaretBoundary>
+caretBoundaries(const PreparedTextLine &line);
+
+[[nodiscard]] TextHitTestResult hitTestTextLine(const TextLineLayout &line,
+                                                float x);
+
+[[nodiscard]] TextHitTestResult hitTestTextLine(const PreparedTextLine &line,
+                                                float x);
+
+[[nodiscard]] TextHitTestResult caretForByteOffset(const TextLineLayout &line,
+                                                   std::size_t byteOffset);
+
+[[nodiscard]] TextHitTestResult caretForByteOffset(const PreparedTextLine &line,
+                                                   std::size_t byteOffset);
+
+[[nodiscard]] float caretXForByteOffset(const TextLineLayout &line,
+                                        std::size_t byteOffset);
+
+[[nodiscard]] float caretXForByteOffset(const PreparedTextLine &line,
+                                        std::size_t byteOffset);
+
+[[nodiscard]] std::vector<TextSelectionRect>
+selectionRectsForByteRange(const TextLineLayout &line,
+                           std::size_t beginByteOffset,
+                           std::size_t endByteOffset);
+
+[[nodiscard]] std::vector<TextSelectionRect>
+selectionRectsForByteRange(const PreparedTextLine &line,
+                           std::size_t beginByteOffset,
+                           std::size_t endByteOffset);
 
 [[nodiscard]] TextCompatibilityReport
 analyzeTextCompatibility(const TextLineLayout &layout);

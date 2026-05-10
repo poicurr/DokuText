@@ -55,6 +55,7 @@ add_dokutext_test(DokuTextTestPageInfo TextAtlasPageInfoTest.cpp)
 add_dokutext_test(DokuTextTestProbeText TextProbeTest.cpp)
 add_dokutext_test(DokuTextPublicHeaderSmoke DokuTextPublicHeaderSmoke.cpp)
 add_dokutext_test(DokuTextTestPrepareAllowGlyphAppend TextPrepareAllowGlyphAppendTest.cpp)
+add_dokutext_test(DokuTextTestTextInputApi TextInputApiTest.cpp)
 
 target_include_directories(
   DokuTextTestVisualPng PRIVATE ${CMAKE_SOURCE_DIR}/src
