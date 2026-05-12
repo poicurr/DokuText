@@ -86,6 +86,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_COMPILER=${{ matrix.cxx_compiler }} \
             -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.vcpkg_triplet }} \
+            -DVCPKG_INSTALLED_DIR="${GITHUB_WORKSPACE}/vcpkg-installed" \
             -DDOKU_TEXT_ENABLE_PNG_IO=${{ matrix.png_io }} \
             -DDOKU_TEXT_BUILD_TESTS=${{ matrix.build_tests }} \
             -DDOKU_TEXT_BUILD_EXAMPLES=${{ matrix.build_examples }} \
@@ -130,6 +132,8 @@ jobs:
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.vcpkg_triplet }} \
+            -DVCPKG_INSTALLED_DIR="${GITHUB_WORKSPACE}/vcpkg-installed" \
             -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/install-dokutext"
           cmake --build "${GITHUB_WORKSPACE}/consumer-build" --config Release
         shell: bash
