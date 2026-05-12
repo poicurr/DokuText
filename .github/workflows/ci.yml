@@ -13,6 +13,7 @@ jobs:
         include:
           - os: windows-latest
             build_name: windows-msvc
+            c_compiler: cl
             cxx_compiler: cl
             vcpkg_triplet: x64-windows
             png_io: ON
@@ -21,6 +22,7 @@ jobs:
             build_cli: ON
           - os: windows-latest
             build_name: windows-clang-cl
+            c_compiler: clang-cl
             cxx_compiler: clang-cl
             vcpkg_triplet: x64-windows
             png_io: ON
@@ -29,6 +31,7 @@ jobs:
             build_cli: OFF
           - os: ubuntu-latest
             build_name: ubuntu-gcc
+            c_compiler: gcc
             cxx_compiler: g++
             vcpkg_triplet: x64-linux
             png_io: ON
@@ -37,6 +40,7 @@ jobs:
             build_cli: ON
           - os: ubuntu-latest
             build_name: ubuntu-clang
+            c_compiler: clang
             cxx_compiler: clang++
             vcpkg_triplet: x64-linux
             png_io: OFF
@@ -84,6 +88,7 @@ jobs:
           cmake -S . -B build \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
             -DCMAKE_CXX_COMPILER=${{ matrix.cxx_compiler }} \
             -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_TARGET_TRIPLET=${{ matrix.vcpkg_triplet }} \
@@ -131,6 +136,8 @@ jobs:
           cmake -S "${GITHUB_WORKSPACE}/consumer" -B "${GITHUB_WORKSPACE}/consumer-build" \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx_compiler }} \
             -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_TARGET_TRIPLET=${{ matrix.vcpkg_triplet }} \
             -DVCPKG_INSTALLED_DIR="${GITHUB_WORKSPACE}/vcpkg-installed" \
