@@ -53,8 +53,8 @@ option(DOKU_TEXT_ENABLE_PNG_IO
   ${DOKU_TEXT_ENABLE_PNG_IO_DEFAULT}
 )
 
-find_package(freetype CONFIG REQUIRED)
-find_package(harfbuzz REQUIRED)
+find_package(Freetype REQUIRED)
+find_package(harfbuzz CONFIG REQUIRED)
 if (DOKU_TEXT_ENABLE_PNG_IO)
   find_package(PNG REQUIRED)
 endif()

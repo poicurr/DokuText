@@ -2,8 +2,8 @@
 
 include(CMakeFindDependencyMacro)
 
-find_dependency(freetype CONFIG REQUIRED)
-find_dependency(harfbuzz REQUIRED)
+find_dependency(Freetype REQUIRED)
+find_dependency(harfbuzz CONFIG REQUIRED)
 
 if (@DOKU_TEXT_ENABLE_PNG_IO@)
   find_dependency(PNG REQUIRED)
