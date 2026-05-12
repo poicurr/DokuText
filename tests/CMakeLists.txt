@@ -60,6 +60,9 @@ add_dokutext_test(
   DokuTextTestDynamicAtlasSeedIdempotency
   DynamicAtlasSeedIdempotencyTest.cpp
 )
+add_dokutext_test(DokuTextPublicHeaderSmokeHighLevel DokuTextPublicHeaderSmokeHighLevel.cpp)
+add_dokutext_test(DokuTextPublicHeaderSmokeLowLevel DokuTextPublicHeaderSmokeLowLevel.cpp)
+add_dokutext_test(DokuTextPublicHeaderSmokeGeometry DokuTextPublicHeaderSmokeGeometry.cpp)
 add_dokutext_test(DokuTextTestPageInfo TextAtlasPageInfoTest.cpp)
 add_dokutext_test(DokuTextTestProbeText TextProbeTest.cpp)
 add_dokutext_test(DokuTextPublicHeaderSmoke DokuTextPublicHeaderSmoke.cpp)
