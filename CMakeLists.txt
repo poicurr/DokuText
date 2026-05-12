@@ -94,14 +94,6 @@ target_compile_features(DokuText PUBLIC cxx_std_20)
 if (WIN32)
   target_compile_definitions(DokuText PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 endif()
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  if (WIN32)
-  else()
-    target_compile_options(DokuText PRIVATE -stdlib=libstdc++)
-    target_link_options(DokuText PRIVATE -stdlib=libstdc++ -lc++abi)
-  endif()
-endif()
-
 if (DOKU_TEXT_BUILD_CLI)
   add_executable(app
     src/cli_main.cpp

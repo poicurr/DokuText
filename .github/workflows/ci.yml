@@ -47,6 +47,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup MSVC dev command prompt
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Prepare vcpkg manifest mode
         run: |
           VCPKG_ROOT="${{ github.workspace }}/.vcpkg"
@@ -95,4 +99,37 @@ jobs:
       - name: Run tests
         if: matrix.build_tests == 'ON'
         run: ctest --test-dir build --output-on-failure -C Release
+        shell: bash
+
+      - name: Install package
+        run: cmake --install build --prefix "${GITHUB_WORKSPACE}/install-dokutext"
+        shell: bash
+
+      - name: Smoke test install via find_package
+        run: |
+          mkdir -p "${GITHUB_WORKSPACE}/consumer"
+          cat > "${GITHUB_WORKSPACE}/consumer/CMakeLists.txt" <<'EOF'
+          cmake_minimum_required(VERSION 3.20)
+          project(DokuTextConsumer LANGUAGES CXX)
+
+          find_package(DokuText CONFIG REQUIRED)
+
+          add_executable(consumer main.cpp)
+          target_link_libraries(consumer PRIVATE DokuText::DokuText)
+          target_compile_features(consumer PRIVATE cxx_std_20)
+          EOF
+          cat > "${GITHUB_WORKSPACE}/consumer/main.cpp" <<'EOF'
+          #include <DokuText/DokuText.hpp>
+
+          int main() {
+            doku::text::TextSystem textSystem;
+            return 0;
+          }
+          EOF
+          cmake -S "${GITHUB_WORKSPACE}/consumer" -B "${GITHUB_WORKSPACE}/consumer-build" \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" \
+            -DCMAKE_PREFIX_PATH="${GITHUB_WORKSPACE}/install-dokutext"
+          cmake --build "${GITHUB_WORKSPACE}/consumer-build" --config Release
         shell: bash
