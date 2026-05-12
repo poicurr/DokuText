@@ -200,17 +200,30 @@ Unsupported or future scope:
 
 This is a DokuText-side synchronous atlas update path.
 
-### Planned DokuEngine integration behavior
+### Runtime budgeted integration guidance
 
-DokuEngine integration should add a budgeted scheduling layer over this capability:
+Runtime UI では `allowGlyphAppend = false` を基本とし、欠落 glyph は非破壊経路で検出してから
+DokuEngine 側の adapter が予算付きで append することを推奨します。
 
-- small initial seed atlas
-- pending missing glyph queue
-- max glyphs per frame
-- no full Unicode-range preload for runtime UI
-- no large one-frame synchronous CJK/Emoji rasterization spike
-- dirty-rect GPU upload based on atlas upload plans
-- non-permanent missing glyph cache state
+- `TextPrepareOptions.allowGlyphAppend = false` で `prepareLine` / `prepareText` を実行し、描画を構築しつつ atlas 変更を抑止する
+- `probeText` で不足 glyph を検出する
+- `buildTextAtlasAppendPlan` で不足候補から実行計画を作成する（`TextAtlasAppendBudget` / `TextAtlasAppendPlan`）
+- `TextAtlas::glyphSetRevision` / `TextAtlas::atlasTextureRevision` を監視し、cache 無効化と renderer 同期待ちに反映する
+- adapter が budget 内で `seedAtlas` / `prepare... (allowGlyphAppend = true)` を実行し、`AtlasPageUploadPlan` の dirty rect だけを GPU 更新する
+
+### DokuText contracts currently available
+
+`TextAtlasAppendBudget`:
+
+- `maxGlyphs`: `0` で無制限
+- `maxColorGlyphs`: `0` で無制限
+- `maxAtlasUploadBytes`: `0` で無制限
+
+`TextAtlasAppendPlan`:
+
+- `candidates`: layout 内で欠落した `MissingAtlasGlyph` 候補
+- `estimatedGlyphCount`, `estimatedColorGlyphCount`, `estimatedUploadBytes`
+- `budgetExceeded`
 
 ## 11. Revision Model
 
@@ -218,19 +231,18 @@ DokuEngine integration should add a budgeted scheduling layer over this capabili
 
 `BakedTextAtlas` exposes a stable `revision()` for immutable baked atlas identity.
 
-`TextAtlas` currently exposes update objects and upload plans through seeding and preparation results.
+`TextAtlas` exposes:
+
+- `glyphSetRevision()`: glyph set の論理的変化を表す
+- `atlasTextureRevision()`: atlas 画像内容更新を表す
+
+`glyphSetRevision` は `evictedHandles` / `updatedEntries` の変化を追跡し、prepared text cache などの無効化トリガになります。
+
+`atlasTextureRevision` は `newPages` / `dirtyRects` の発生を追跡し、renderer への再アップロードトリガになります。
 
 ### Planned DokuEngine integration revisions
 
-DokuEngine integration should distinguish two revision concepts:
-
-- `glyphSetRevision`
-  - logical glyph availability changed
-  - used for `UiTextCache` / prepared text invalidation
-
-- `atlasTextureRevision`
-  - atlas page texture contents changed
-  - used for renderer texture synchronization and dirty-rect upload
+`DokuEngine` 側 adapter では上記 revision 概念を使って `UiTextCache` の invalidation と renderer texture sync の境界を分離してください。
 
 Missing glyph states must not be permanently cached because fallback chains, font reloads, atlas updates, or dynamic append may later resolve them.
 

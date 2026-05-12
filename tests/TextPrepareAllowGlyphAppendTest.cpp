@@ -86,6 +86,101 @@ bool hasMissingColorBitmapGlyph(const TextProbeResult &probe) {
   return false;
 }
 
+void test_append_plan_from_non_mutating_layout() {
+  std::cout << "Running test_append_plan_from_non_mutating_layout..."
+            << std::endl;
+
+  TextSystem system;
+  const FontChainId fontChainId = registerDefaultChain(system);
+  TextAtlasOptions atlasOptions = makeAtlasOptions(fontChainId);
+  TextAtlas atlas(atlasOptions);
+
+  TextPrepareOptions options;
+  options.layoutOptions.horizontalAlign = HorizontalAlign::Left;
+  const TextAtlasAppendPlan plan =
+      system.buildTextAtlasAppendPlan(atlas, "Hello", options);
+
+  check(plan.estimatedGlyphCount > 0,
+        "append plan should report missing glyph candidates");
+  check(!plan.candidates.empty(),
+        "append plan should return concrete missing glyph candidates");
+  check(plan.estimatedColorGlyphCount == 0,
+        "ASCII append plan should not require color glyphs");
+  check(!plan.budgetExceeded, "append plan should not exceed default budget");
+  check(atlas.entries().empty(),
+        "append plan should not mutate atlas");
+}
+
+void test_append_plan_budget_gate() {
+  std::cout << "Running test_append_plan_budget_gate..." << std::endl;
+
+  TextSystem system;
+  const FontChainId fontChainId = registerDefaultChain(system);
+  TextAtlasOptions atlasOptions = makeAtlasOptions(fontChainId);
+  TextAtlas atlas(atlasOptions);
+
+  TextAtlasAppendBudget budget;
+  budget.maxGlyphs = 1U;
+  const TextAtlasAppendPlan plan =
+      system.buildTextAtlasAppendPlan(atlas, "Hello", {}, budget);
+
+  check(plan.budgetExceeded,
+        "append plan should flag budget exceeded when maxGlyphs is too small");
+}
+
+void test_append_plan_color_glyph_candidates() {
+  std::cout << "Running test_append_plan_color_glyph_candidates..."
+            << std::endl;
+
+  TextSystem system;
+  const FontChainId fontChainId = registerDefaultChain(system);
+  TextAtlasOptions atlasOptions = makeAtlasOptions(fontChainId, 64);
+  TextAtlas atlas(atlasOptions);
+
+  const TextAtlasAppendPlan plan = system.buildTextAtlasAppendPlan(atlas, "🍣");
+  check(plan.estimatedColorGlyphCount > 0,
+        "emoji append plan should include color glyph candidates");
+}
+
+void test_revisions_change_only_on_mutation() {
+  std::cout << "Running test_revisions_change_only_on_mutation..."
+            << std::endl;
+
+  TextSystem system;
+  const FontChainId fontChainId = registerDefaultChain(system);
+  TextAtlasOptions atlasOptions = makeAtlasOptions(fontChainId);
+  TextAtlas atlas(atlasOptions);
+
+  check(atlas.glyphSetRevision() == 0,
+        "initial glyphSetRevision should be 0");
+  check(atlas.atlasTextureRevision() == 0,
+        "initial atlasTextureRevision should be 0");
+
+  TextPrepareOptions noAppend;
+  noAppend.allowGlyphAppend = false;
+  (void)system.prepareLine(atlas, "Hello", noAppend);
+  check(atlas.glyphSetRevision() == 0,
+        "non-mutating prepareLine should not change glyphSetRevision");
+  check(atlas.atlasTextureRevision() == 0,
+        "non-mutating prepareLine should not change atlasTextureRevision");
+
+  TextPrepareOptions yesAppend;
+  yesAppend.allowGlyphAppend = true;
+  (void)system.prepareLine(atlas, "Hello", yesAppend);
+  check(atlas.glyphSetRevision() > 0,
+        "mutating prepareLine should advance glyphSetRevision");
+  check(atlas.atlasTextureRevision() > 0,
+        "mutating prepareLine should advance atlasTextureRevision");
+
+  const std::uint64_t glyphRevision = atlas.glyphSetRevision();
+  const std::uint64_t textureRevision = atlas.atlasTextureRevision();
+  (void)system.prepareLine(atlas, "Hello", yesAppend);
+  check(atlas.glyphSetRevision() == glyphRevision,
+        "existing-glyph prepareLine should not advance glyphSetRevision");
+  check(atlas.atlasTextureRevision() == textureRevision,
+        "existing-glyph prepareLine should not advance atlasTextureRevision");
+}
+
 void test_prepareLine_false_empty_atlas_string_view() {
   std::cout << "Running test_prepareLine_false_empty_atlas_string_view..."
             << std::endl;
@@ -347,6 +442,10 @@ int main() {
   test_prepareText_false_empty_atlas_text_request();
   test_prepareLine_true_empty_atlas();
   test_default_options_preserve_behavior();
+  test_append_plan_from_non_mutating_layout();
+  test_append_plan_budget_gate();
+  test_append_plan_color_glyph_candidates();
+  test_revisions_change_only_on_mutation();
   test_seeded_atlas_false_string_view();
   test_seeded_atlas_false_text_request();
   test_emoji_false_string_view();

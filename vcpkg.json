@@ -1,0 +1,10 @@
+{
+  "name": "dokutext",
+  "version": "0.1.0",
+  "description": "Text backend library for DokuEngine",
+  "dependencies": [
+    "freetype",
+    "harfbuzz",
+    "libpng"
+  ]
+}

@@ -1042,6 +1042,23 @@ struct TextProbeResult {
   std::vector<Diagnostic> diagnostics;
 };
 
+/// Budget used for runtime budgeted append scheduling.
+/// All fields use 0 for "unlimited".
+struct TextAtlasAppendBudget {
+  std::size_t maxGlyphs = 0;
+  std::size_t maxColorGlyphs = 0;
+  std::size_t maxAtlasUploadBytes = 0;
+};
+
+/// Non-mutating plan extracted from a layout/probe result for append scheduling.
+struct TextAtlasAppendPlan {
+  std::vector<MissingAtlasGlyph> candidates;
+  std::size_t estimatedGlyphCount = 0;
+  std::size_t estimatedColorGlyphCount = 0;
+  std::size_t estimatedUploadBytes = 0;
+  bool budgetExceeded = false;
+};
+
 class TextAtlas {
 public:
   explicit TextAtlas(const TextAtlasOptions &options);
@@ -1058,6 +1075,8 @@ public:
   [[nodiscard]] GlyphAtlasCache &cache();
   [[nodiscard]] const GlyphAtlasCacheUpdate &lastUpdate() const;
   [[nodiscard]] const std::vector<AtlasPageUploadPlan> &lastUploadPlan() const;
+  [[nodiscard]] std::uint64_t glyphSetRevision() const;
+  [[nodiscard]] std::uint64_t atlasTextureRevision() const;
   [[nodiscard]] const std::vector<GlyphAtlasPage> &pages() const;
   [[nodiscard]] std::vector<GlyphAtlasEntry> entries() const;
 
@@ -1146,6 +1165,16 @@ public:
 
   [[nodiscard]] TextAtlasSeedResult
   seedAtlas(TextAtlas &atlas, const TextSeedRequest &seedRequest) const;
+
+  [[nodiscard]] TextAtlasAppendPlan
+  buildTextAtlasAppendPlan(const TextAtlas &atlas, std::string_view text,
+                          const TextPrepareOptions &options = {},
+                          const TextAtlasAppendBudget &budget = {}) const;
+
+  [[nodiscard]] TextAtlasAppendPlan
+  buildTextAtlasAppendPlan(const TextAtlas &atlas,
+                          const TextRequest &request,
+                          const TextAtlasAppendBudget &budget = {}) const;
 
   [[nodiscard]] TextProbeResult
   probeText(const TextAtlas &atlas, std::string_view text,

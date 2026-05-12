@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            build_name: windows-msvc
+            cxx_compiler: cl
+            vcpkg_triplet: x64-windows
+            png_io: ON
+            build_tests: ON
+            build_examples: ON
+            build_cli: ON
+          - os: windows-latest
+            build_name: windows-clang-cl
+            cxx_compiler: clang-cl
+            vcpkg_triplet: x64-windows
+            png_io: ON
+            build_tests: ON
+            build_examples: OFF
+            build_cli: OFF
+          - os: ubuntu-latest
+            build_name: ubuntu-gcc
+            cxx_compiler: g++
+            vcpkg_triplet: x64-linux
+            png_io: ON
+            build_tests: ON
+            build_examples: ON
+            build_cli: ON
+          - os: ubuntu-latest
+            build_name: ubuntu-clang
+            cxx_compiler: clang++
+            vcpkg_triplet: x64-linux
+            png_io: OFF
+            build_tests: OFF
+            build_examples: OFF
+            build_cli: OFF
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare vcpkg manifest mode
+        run: |
+          VCPKG_ROOT="${{ github.workspace }}/.vcpkg"
+          if [ ! -d "$VCPKG_ROOT" ]; then
+            git clone https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+          fi
+          if [ ! -x "$VCPKG_ROOT/vcpkg" ]; then
+            if [ "${{ runner.os }}" = "Windows" ]; then
+              "$VCPKG_ROOT/bootstrap-vcpkg.bat"
+            else
+              "$VCPKG_ROOT/bootstrap-vcpkg.sh"
+            fi
+          fi
+          echo "VCPKG_ROOT=$VCPKG_ROOT" >> "$GITHUB_ENV"
+        shell: bash
+
+      - name: Cache vcpkg installed artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/vcpkg
+            ${{ github.workspace }}/.vcpkg/installed
+            ${{ github.workspace }}/.vcpkg/packages
+            ${{ github.workspace }}/.vcpkg/downloads
+          key: ${{ runner.os }}-${{ matrix.cxx_compiler }}-${{ matrix.vcpkg_triplet }}-${{ matrix.png_io }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.cxx_compiler }}-${{ matrix.vcpkg_triplet }}-${{ matrix.png_io }}-
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx_compiler }} \
+            -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" \
+            -DDOKU_TEXT_ENABLE_PNG_IO=${{ matrix.png_io }} \
+            -DDOKU_TEXT_BUILD_TESTS=${{ matrix.build_tests }} \
+            -DDOKU_TEXT_BUILD_EXAMPLES=${{ matrix.build_examples }} \
+            -DDOKU_TEXT_BUILD_CLI=${{ matrix.build_cli }}
+        shell: bash
+
+      - name: Build
+        run: cmake --build build --config Release
+        shell: bash
+
+      - name: Run tests
+        if: matrix.build_tests == 'ON'
+        run: ctest --test-dir build --output-on-failure -C Release
+        shell: bash

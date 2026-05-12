@@ -71,6 +71,13 @@ cd DokuText
 ./build.sh        # or build.bat on Windows
 ```
 
+```bash
+# CMake直接での構成
+cmake -S . -B build -DDOKU_TEXT_BUILD_TESTS=ON -DDOKU_TEXT_BUILD_EXAMPLES=ON -DDOKU_TEXT_BUILD_CLI=ON
+cmake --build build --config Release
+ctest --test-dir build --output-on-failure -C Release
+```
+
 ## FetchContent
 
 ```cmake
@@ -90,6 +97,17 @@ target_link_libraries(your_target PRIVATE DokuText::DokuText)
 Public header: `#include <DokuText/DokuText.hpp>`
 Namespace: `doku::text`
 CMake target: `DokuText::DokuText`
+
+## Install and `find_package`
+
+```bash
+cmake --install build --prefix path/to/install
+```
+
+```cmake
+find_package(DokuText CONFIG REQUIRED)
+target_link_libraries(your_target PRIVATE DokuText::DokuText)
+```
 
 ## High-Level Facade
 
@@ -157,6 +175,44 @@ See `docs/text_backend_contract.md` for the full specification.
 - `examples/StaticAtlasEmbedding.cpp`: `BakedTextAtlas` static atlas flow.
 - `tests/TextSystemFacadeTest.cpp`: Verification of the high-level facade.
 - `tests/BakedAtlasApiTest.cpp`: Verification of the static atlas contract.
+
+## Runtime atlas append strategy for DokuEngine integration
+
+DokuText の現在の API では、UI runtime でのフレーム内一括 `allowGlyphAppend = true` を避ける前提の構成を案内できます。
+
+推奨手順:
+
+1. `prepareLine` / `prepareText` を `allowGlyphAppend = false` で呼び出して、必要な箇所の描画結果を取得しつつ atlas 変更を抑止する。  
+2. 同一テキストは `probeText` または `buildTextAtlasAppendPlan` で不足 glyph を取得する。  
+3. DokuEngine 側の列（キュー）に候補を格納し、1 フレームあたりの budget（`TextAtlasAppendBudget`）で `glyphSetRevision` / `atlasTextureRevision` の差分に追従して一部だけ append する。  
+4. `atlasUploadPlan` / dirty rect を用いて、変更分だけ renderer texture を更新する。
+
+補助:
+
+```cpp
+doku::text::TextPrepareOptions options;
+options.allowGlyphAppend = false;
+
+doku::text::TextAtlasAppendBudget budget;
+budget.maxGlyphs = 32;            // 0 は無制限
+budget.maxColorGlyphs = 8;        // 0 は無制限
+budget.maxAtlasUploadBytes = 0;    // 0 は無制限
+
+const auto plan = textSystem.buildTextAtlasAppendPlan(atlas, "UI text", options, budget);
+// plan.budgetExceeded を確認し、adapter 側で実行可否を決める
+```
+
+`TextAtlas` は revision API を持ちます。
+
+```cpp
+auto glyphSet = atlas.glyphSetRevision();
+auto atlasTexture = atlas.atlasTextureRevision();
+```
+
+ - `glyphSetRevision`: atlas の論理的な glyph set が変化した時に進む。テキスト cache の無効化に利用。  
+ - `atlasTextureRevision`: atlas 画像データや dirty rect を伴う変更時に進む。GPU への再アップロード条件に利用。
+
+不足 glyph の情報を永続キャッシュしない点は意図的です。フォントリロードや今後の append 結果で解決し得るため、DokuEngine 側は毎フレーム probe / plan を更新する運用を推奨します。
 
 ---
 

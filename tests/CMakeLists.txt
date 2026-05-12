@@ -35,8 +35,10 @@ add_dokutext_test(
   MultiLineTextApiTest.cpp
 )
 add_dokutext_test(DokuTextTestAtlasCacheApi AtlasCacheApiTest.cpp)
-add_dokutext_test(DokuTextTestVisualPng VisualPngScenarioTest.cpp)
-add_dokutext_test(DokuTextTestBakedAtlasPng BakedAtlasPngTest.cpp)
+if(DOKU_TEXT_ENABLE_PNG_IO)
+  add_dokutext_test(DokuTextTestVisualPng VisualPngScenarioTest.cpp)
+  add_dokutext_test(DokuTextTestBakedAtlasPng BakedAtlasPngTest.cpp)
+endif()
 add_dokutext_test(DokuTextTestEmptyFallback EmptyFallbackTest.cpp)
 add_dokutext_test(
   DokuTextTestIntegrationAdapter
@@ -60,9 +62,11 @@ add_dokutext_test(DokuTextTestTextInputApi TextInputApiTest.cpp)
 target_include_directories(
   DokuTextTestVisualPng PRIVATE ${CMAKE_SOURCE_DIR}/src
 )
-target_include_directories(
-  DokuTextTestBakedAtlasPng PRIVATE ${CMAKE_SOURCE_DIR}/src
-)
+if(DOKU_TEXT_ENABLE_PNG_IO)
+  target_include_directories(
+    DokuTextTestBakedAtlasPng PRIVATE ${CMAKE_SOURCE_DIR}/src
+  )
+endif()
 target_include_directories(
   DokuTextTestColrV1GradientRender PRIVATE ${CMAKE_SOURCE_DIR}/src
 )

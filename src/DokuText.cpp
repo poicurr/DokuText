@@ -29,6 +29,7 @@
 #include <string_view>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -3636,6 +3637,49 @@ collectMissingGlyphs(const std::vector<Diagnostic> &diagnostics) {
   return missingGlyphs;
 }
 
+[[nodiscard]] TextAtlasAppendPlan buildTextAtlasAppendPlanFromLayout(
+    const TextAtlas &atlas, const MultiLineLayout &layout,
+    const TextAtlasAppendBudget &budget) {
+  TextAtlasAppendPlan plan;
+  std::unordered_set<std::uint64_t> uniqueHandles;
+  plan.candidates.reserve(layout.glyphs.size());
+  uniqueHandles.reserve(layout.glyphs.size());
+
+  for (const PositionedGlyph &glyph : layout.glyphs) {
+    if (atlas.containsGlyph(glyph.handle)) {
+      continue;
+    }
+    if (!uniqueHandles.insert(glyph.handle.value).second) {
+      continue;
+    }
+
+    plan.candidates.push_back({
+        glyph.glyph.codePoints.empty() ? 0U : glyph.glyph.codePoints.front(),
+        glyph.handle, glyph.glyphId, atlas.options().fontChainId,
+        glyph.glyph.fontPath, glyph.materialKind, glyph.isColorGlyph});
+    ++plan.estimatedGlyphCount;
+    if (glyph.isColorGlyph) {
+      ++plan.estimatedColorGlyphCount;
+    }
+    plan.estimatedUploadBytes +=
+        static_cast<std::size_t>(glyph.glyph.image.width) *
+        static_cast<std::size_t>(glyph.glyph.image.height) * 4U;
+  }
+
+  if (budget.maxGlyphs > 0 && plan.estimatedGlyphCount > budget.maxGlyphs) {
+    plan.budgetExceeded = true;
+  }
+  if (budget.maxColorGlyphs > 0 &&
+      plan.estimatedColorGlyphCount > budget.maxColorGlyphs) {
+    plan.budgetExceeded = true;
+  }
+  if (budget.maxAtlasUploadBytes > 0 &&
+      plan.estimatedUploadBytes > budget.maxAtlasUploadBytes) {
+    plan.budgetExceeded = true;
+  }
+  return plan;
+}
+
 [[nodiscard]] std::uint64_t
 computeBakedAtlasRevision(const TextAtlasBakeRequest &request,
                           const std::vector<GlyphAtlasEntry> &entries,
@@ -3841,6 +3885,8 @@ public:
   GlyphAtlasCache m_cache;
   GlyphAtlasCacheUpdate m_lastUpdate;
   std::vector<AtlasPageUploadPlan> m_lastUploadPlan;
+  std::uint64_t m_glyphSetRevision = 0;
+  std::uint64_t m_atlasTextureRevision = 0;
 };
 
 TextAtlas::TextAtlas(const TextAtlasOptions &options)
@@ -3864,6 +3910,14 @@ const GlyphAtlasCacheUpdate &TextAtlas::lastUpdate() const {
 
 const std::vector<AtlasPageUploadPlan> &TextAtlas::lastUploadPlan() const {
   return m_impl->m_lastUploadPlan;
+}
+
+std::uint64_t TextAtlas::glyphSetRevision() const {
+  return m_impl->m_glyphSetRevision;
+}
+
+std::uint64_t TextAtlas::atlasTextureRevision() const {
+  return m_impl->m_atlasTextureRevision;
 }
 
 const std::vector<GlyphAtlasPage> &TextAtlas::pages() const {
@@ -4180,6 +4234,28 @@ TextProbeResult TextSystem::probeText(const TextAtlas &atlas,
                                                  std::string(text), options));
 }
 
+TextAtlasAppendPlan TextSystem::buildTextAtlasAppendPlan(
+    const TextAtlas &atlas, std::string_view text,
+    const TextPrepareOptions &options, const TextAtlasAppendBudget &budget) const {
+  return buildTextAtlasAppendPlan(
+      atlas, makeAtlasBackedRequest(atlas.options(), std::string(text), options),
+      budget);
+}
+
+TextAtlasAppendPlan TextSystem::buildTextAtlasAppendPlan(
+    const TextAtlas &atlas, const TextRequest &request,
+    const TextAtlasAppendBudget &budget) const {
+  TextAtlasAppendPlan plan;
+  if (request.fontChainId.value != atlas.options().fontChainId.value ||
+      request.pixelSize != atlas.options().pixelSize ||
+      request.paletteIndex != atlas.options().paletteIndex) {
+    return plan;
+  }
+
+  const MultiLineLayout layout = m_impl->m_renderer.layoutText(request);
+  return buildTextAtlasAppendPlanFromLayout(atlas, layout, budget);
+}
+
 TextProbeResult TextSystem::probeText(const TextAtlas &atlas,
                                       const TextRequest &request) const {
   TextProbeResult result;
@@ -4260,6 +4336,18 @@ TextSystem::seedAtlas(TextAtlas &atlas,
   result.missingGlyphCount = collectMissingGlyphs(result.diagnostics).size();
   result.atlasChanged = (result.insertedGlyphCount > 0) ||
                         (atlas.pages().size() > pageCountBefore);
+  const bool glyphSetChanged =
+      !result.atlasUpdate.updatedEntries.empty() ||
+      !result.atlasUpdate.evictedHandles.empty();
+  const bool atlasTextureChanged =
+      glyphSetChanged || !result.atlasUpdate.newPages.empty() ||
+      !result.atlasUpdate.dirtyRects.empty();
+  if (glyphSetChanged) {
+    ++atlas.m_impl->m_glyphSetRevision;
+  }
+  if (atlasTextureChanged) {
+    ++atlas.m_impl->m_atlasTextureRevision;
+  }
 
   if (result.atlasChanged) {
     atlas.m_impl->m_lastUpdate = result.atlasUpdate;
@@ -4293,6 +4381,18 @@ TextSystem::prepareLine(TextAtlas &atlas, const TextRequest &request,
   result.layout = m_impl->m_renderer.layoutLine(request);
   if (options.allowGlyphAppend) {
     result.atlasUpdate = atlas.m_impl->m_cache.ensureGlyphs(result.layout);
+    const bool glyphSetChanged =
+        !result.atlasUpdate.updatedEntries.empty() ||
+        !result.atlasUpdate.evictedHandles.empty();
+    const bool atlasTextureChanged =
+        glyphSetChanged || !result.atlasUpdate.newPages.empty() ||
+        !result.atlasUpdate.dirtyRects.empty();
+    if (glyphSetChanged) {
+      ++atlas.m_impl->m_glyphSetRevision;
+    }
+    if (atlasTextureChanged) {
+      ++atlas.m_impl->m_atlasTextureRevision;
+    }
     atlas.m_impl->m_lastUpdate = result.atlasUpdate;
     atlas.m_impl->m_lastUploadPlan =
         buildAtlasPageUploadPlan(atlas.m_impl->m_cache, result.atlasUpdate);
@@ -4333,6 +4433,18 @@ TextSystem::prepareText(TextAtlas &atlas, const TextRequest &request,
   result.layout = m_impl->m_renderer.layoutText(request);
   if (options.allowGlyphAppend) {
     result.atlasUpdate = atlas.m_impl->m_cache.ensureGlyphs(result.layout);
+    const bool glyphSetChanged =
+        !result.atlasUpdate.updatedEntries.empty() ||
+        !result.atlasUpdate.evictedHandles.empty();
+    const bool atlasTextureChanged =
+        glyphSetChanged || !result.atlasUpdate.newPages.empty() ||
+        !result.atlasUpdate.dirtyRects.empty();
+    if (glyphSetChanged) {
+      ++atlas.m_impl->m_glyphSetRevision;
+    }
+    if (atlasTextureChanged) {
+      ++atlas.m_impl->m_atlasTextureRevision;
+    }
     atlas.m_impl->m_lastUpdate = result.atlasUpdate;
     atlas.m_impl->m_lastUploadPlan =
         buildAtlasPageUploadPlan(atlas.m_impl->m_cache, result.atlasUpdate);

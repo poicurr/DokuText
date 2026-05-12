@@ -53,24 +53,19 @@ option(DOKU_TEXT_ENABLE_PNG_IO
   ${DOKU_TEXT_ENABLE_PNG_IO_DEFAULT}
 )
 
-if ((DOKU_TEXT_BUILD_CLI OR DOKU_TEXT_BUILD_EXAMPLES OR DOKU_TEXT_BUILD_TESTS) AND
-    NOT DOKU_TEXT_ENABLE_PNG_IO)
-  message(FATAL_ERROR
-    "DOKU_TEXT_ENABLE_PNG_IO must be ON when CLI, examples, or tests are enabled")
-endif()
-
 find_package(freetype CONFIG REQUIRED)
 find_package(harfbuzz REQUIRED)
 if (DOKU_TEXT_ENABLE_PNG_IO)
   find_package(PNG REQUIRED)
 endif()
 
-add_library(DokuText
-  src/main.cpp
+set(DOKU_TEXT_LIBRARY_SOURCES
+  src/DokuText.cpp
   src/core/ir/Bitmap.cpp
   src/adapter/render/ColrV0Renderer.cpp
   src/adapter/render/ColrV1Renderer.cpp
 )
+add_library(DokuText ${DOKU_TEXT_LIBRARY_SOURCES})
 if (DOKU_TEXT_ENABLE_PNG_IO)
   target_sources(DokuText PRIVATE
     src/adapter/io/PngWriter.cpp
@@ -137,4 +132,26 @@ install(EXPORT DokuTextTargets
   FILE DokuTextTargets.cmake
   NAMESPACE DokuText::
   DESTINATION lib/cmake/DokuText
+)
+
+include(CMakePackageConfigHelpers)
+
+set(DOKU_TEXT_INSTALL_CMAKE_DIR lib/cmake/DokuText)
+configure_package_config_file(
+  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/DokuTextConfig.cmake.in
+  ${CMAKE_CURRENT_BINARY_DIR}/DokuTextConfig.cmake
+  INSTALL_DESTINATION ${DOKU_TEXT_INSTALL_CMAKE_DIR}
+)
+
+write_basic_package_version_file(
+  ${CMAKE_CURRENT_BINARY_DIR}/DokuTextConfigVersion.cmake
+  VERSION ${PROJECT_VERSION}
+  COMPATIBILITY SameMajorVersion
+)
+
+install(
+  FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/DokuTextConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/DokuTextConfigVersion.cmake
+  DESTINATION ${DOKU_TEXT_INSTALL_CMAKE_DIR}
 )
