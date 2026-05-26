@@ -3,7 +3,7 @@
 ## 1. Purpose
 DokuText is a comprehensive text shaping, layout, and atlas management backend for DokuEngine and other embeddable applications. It provides a bridge between raw font files and renderer-agnostic draw submissions.
 
-Historical Note: This project was formerly known as *GlyphRenderer*.
+**Legacy Note**: This project was formerly known as *GlyphRenderer*. The `glyphrenderer` namespace, old `<GlyphRenderer/...>` include paths, and `GlyphRenderer::GlyphRenderer` CMake target no longer exist in the source tree (see Migration Plan Phase B). Current and future integrations use **DokuText** exclusively. See "Legacy Cleanup Phases (L1-L3)" below.
 
 ## 2. Naming
 
@@ -40,19 +40,29 @@ DokuText does **NOT** handle:
 - IME (Input Method Editor) integration
 
 ## 5. Public API Layers
-- **High-Level Facade (`TextSystem`)**: Recommended for common use cases. Handles `TextAtlas` management and provides `prepareLine`/`prepareText` APIs.
-- **Atlas Layer (`TextAtlas` / `BakedTextAtlas`)**: Manages the lifecycle of glyph images and UV mapping.
-- **Low-Level Core (`DokuText`)**: Provides direct access to shaping, rasterization, and layout stages.
+
+**Recommended for new integrations (including DokuEngine Runtime UI / TextInput / TextEditor):**
+- **High-Level Facade (`TextSystem`)**: Primary entry point. `registerFontFallbackChain`, `createAtlas`/`bakeTextAtlas`, `seedAtlas`, `prepareLine`/`prepareText`, `probeText`, `buildTextAtlasAppendPlan`.
+- **Atlas Types**: `TextAtlas` (mutable, dynamic UI / TextInput path with `allowGlyphAppend` control + revisions) and `BakedTextAtlas` (immutable, static UI path via `layoutText*`).
+- **Input Support**: `caretBoundaries`, `hitTestTextLine`, `caretForByteOffset`/`caretXForByteOffset`, `selectionRectsForByteRange` (and fields on `PreparedTextLine` / `TextLineLayout`).
+
+**Renderer Integration (stable contract):**
+- `buildTextDrawSubmission`, `buildAtlasPageUploadPlan`, `TextDraw*` / `MultiLineDrawRun`, `PositionedDrawGlyph`, `TextAtlasPageInfo`, `AtlasPageUploadPlan`, `MaterialKind` / `SamplerKind` / `BlendHint`, `pageInfo` / `materialKindForPage` accessors, compatibility reports.
+
+**Advanced / Low-Level (custom pipelines, tests, or maximum control only):**
+- `DokuTextContext`, `GlyphAtlasCache` (ensureGlyphs / evict / compact), `DokuText` class (shapeLine/rasterize*/layout*/build* direct stage access), `TextLayoutContext`.
+
+**Guideline**: New integrations and DokuEngine embedding **should prefer the high-level path**. Low-level remains fully supported but is not the primary surface. See README "Recommended API Paths" and "Legacy & Deprecation Policy".
 
 ## 6. Atlas Models
 
-### BakedTextAtlas
+### BakedTextAtlas (Recommended for static UI)
 
 `BakedTextAtlas` is an immutable/static atlas representation.
 
-Use it for fixed-set or precomputed atlas workflows.
+Use it for fixed-set or precomputed atlas workflows (startup bake, no runtime mutation, `layoutText*` for non-mutating prepare).
 
-### TextAtlas
+### TextAtlas (Recommended for dynamic UI / TextInput / TextEditor)
 
 `TextAtlas` is a mutable atlas model.
 
@@ -61,6 +71,8 @@ Current DokuText APIs can synchronously ensure glyphs during:
 - `seedAtlas`
 - `prepareLine`
 - `prepareText`
+
+**DokuEngine integration recommendation**: Use `allowGlyphAppend=false` + `probeText` / `buildTextAtlasAppendPlan` + budget + revisions (`glyphSetRevision` / `atlasTextureRevision`) for controlled append. See README runtime strategy section.
 
 The existence of `TextAtlas` does not imply that DokuEngine budgeted on-demand glyph append integration is complete.
 
@@ -268,3 +280,28 @@ Missing glyph states must not be permanently cached because fallback chains, fon
   - pending missing glyph queue.
   - max glyphs per frame.
   - dirty rect GPU updates.
+
+## Legacy Cleanup Phases (L1-L3) — API Polish 2026
+
+This cleanup round (API inventory, docs, alias coverage) completes **L1** without any breaking changes or physical renames.
+
+- **L1 (Docs & Inventory, current)**: 
+  - Public API surface fully documented as DokuText high-level recommended.
+  - Legacy GlyphRenderer references reduced to historical notes only.
+  - Recommended paths (static Baked vs dynamic TextAtlas vs low-level GlyphAtlasCache) clarified in README and this document.
+  - No code changes, no deprecation macros, no removals.
+  - DokuEngine-facing APIs (TextSystem, caret/hit-test, MaterialKind, upload plans, revisions, compatibility) confirmed stable and covered by `<DokuText/DokuText.hpp>`.
+
+- **L2 (Future, non-breaking)**:
+  - Introduce `[[deprecated("Use ...")]]` or a `DOKU_TEXT_DEPRECATED` macro for any transitional symbols if needed (currently none required).
+  - Add deprecation comments to hypothetical old include paths.
+  - Possibly provide thin compatibility headers (opt-in) that emit warnings.
+  - Update any downstream CMake find_package examples.
+
+- **L3 (Major version only)**:
+  - Removal of any remaining legacy symbols after a deprecation window (e.g. 1-2 minor releases).
+  - At that point, `glyphrenderer` namespace and old targets would be gone forever.
+
+**Rule**: Old API removal **always** requires explicit deprecation phase. No direct deletion of symbols used by DokuEngine or external embedders.
+
+See README "Legacy & Deprecation Policy" for user guidance.

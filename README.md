@@ -4,7 +4,7 @@
 
 **DokuText** is a text backend for DokuEngine and other embeddable applications. It handles font fallback, UTF-8 text shaping, paragraph layout, COLRv0/COLRv1 color glyph rasterization, glyph atlas management, draw-ready text submissions, upload plans, and diagnostics.
 
-Historical Note: This project was formerly known as *GlyphRenderer*.
+**Legacy Note**: This project was formerly known as *GlyphRenderer*. The old name, `glyphrenderer` namespace, `<GlyphRenderer/...>` includes, and `GlyphRenderer::GlyphRenderer` CMake target are no longer present (Phase B migration complete). All current code and new integrations use **DokuText** / `doku::text` / `DokuText::DokuText` / `<DokuText/DokuText.hpp>`. See "Legacy & Deprecation Policy (L1-L3)" below.
 
 ---
 
@@ -169,12 +169,26 @@ See `docs/text_backend_contract.md` for the full specification.
 
 ## Examples / Tests
 
-- `examples/BasicEmbedding.cpp`: High-level `TextSystem` / `TextAtlas` usage.
-- `examples/EngineSessionEmbedding.cpp`: Engine-style persistent session with low-level control.
-- `examples/RendererIntegrationContract.cpp`: Upload plan and draw submission contract details.
-- `examples/StaticAtlasEmbedding.cpp`: `BakedTextAtlas` static atlas flow.
-- `tests/TextSystemFacadeTest.cpp`: Verification of the high-level facade.
-- `tests/BakedAtlasApiTest.cpp`: Verification of the static atlas contract.
+**Recommended for new DokuEngine integrations (high-level DokuText API):**
+
+- `examples/BasicEmbedding.cpp`: `TextSystem` + `TextAtlas` + `seedAtlas` + `prepareLine`/`prepareText` (dynamic UI / TextInput path).
+- `examples/StaticAtlasEmbedding.cpp`: `BakedTextAtlas` + `bakeTextAtlas` + `layoutTextParagraph` (static/immutable UI path).
+- `examples/RendererIntegrationContract.cpp`: Draw submissions, `MaterialKind`, alpha vs color bitmap, upload plans, page info.
+
+**Advanced / low-level (for custom pipelines or tests only):**
+
+- `examples/EngineSessionEmbedding.cpp`: `DokuTextContext` + `GlyphAtlasCache` + `DokuText` class (shaping/raster/layout stages direct control).
+
+**Tests (strong coverage of contracts):**
+
+- `tests/TextInputApiTest.cpp`: caret, hit-test, selection, Japanese/emoji/ZWJ clusters.
+- `tests/DynamicAtlasSeedIdempotencyTest.cpp` + `TextPrepareAllowGlyphAppendTest.cpp`: seed/prepare mutation semantics.
+- `tests/TextAtlasPageInfoTest.cpp` + `BakedAtlasApiTest.cpp`: pageInfo, materialKind, pixel formats, no-mutation for baked.
+- `tests/TextProbeTest.cpp`, `FallbackDiagnosticsTest.cpp`, `AtlasCacheApiTest.cpp`: diagnostics, compatibility, upload/dirty rects.
+
+See `docs/text_backend_contract.md` for the full renderer contract and TextInput support details.
+
+> New integrations **must** prefer the high-level `TextSystem` / `TextAtlas` / `BakedTextAtlas` + `TextRequest` + `prepare*` path. Low-level `DokuText` / `GlyphAtlasCache` APIs remain available for advanced use and internal tests but are not the primary embedding surface.
 
 ## Runtime atlas append strategy for DokuEngine integration
 
@@ -213,6 +227,26 @@ auto atlasTexture = atlas.atlasTextureRevision();
  - `atlasTextureRevision`: atlas 画像データや dirty rect を伴う変更時に進む。GPU への再アップロード条件に利用。
 
 不足 glyph の情報を永続キャッシュしない点は意図的です。フォントリロードや今後の append 結果で解決し得るため、DokuEngine 側は毎フレーム probe / plan を更新する運用を推奨します。
+
+## Legacy & Deprecation Policy (L1-L3)
+
+**Current Status (L1 complete for this cleanup):**
+- DokuText / `doku::text` / `<DokuText/DokuText.hpp>` / `DokuText::DokuText` is the **only** supported public surface.
+- All old `GlyphRenderer` / `glyphrenderer` / `<GlyphRenderer/...>` / `GlyphRenderer::GlyphRenderer` references have been removed from code (Phase B prior).
+- Only historical notes remain in docs (this file and `docs/text_backend_contract.md`).
+
+**Deprecation Phases (no breaking changes in current minor version):**
+
+- **L1 (current, docs & inventory)**: Legacy clearly marked in docs. New code/examples use DokuText high-level. Old names (if any in user code) still "work" only if from pre-Phase-B snapshot. No compiler warnings yet.
+- **L2 (future)**: Consider `[[deprecated]]` attributes or `DOKU_TEXT_DEPRECATED` macro on any remaining compatibility shims (none currently). Add deprecation comments to old include paths (if re-introduced as compat headers). Update CMake alias handling.
+- **L3 (major version boundary)**: Removal of any lingering legacy symbols/paths after clear migration window.
+
+**Guideline for users / DokuEngine**:
+- Do **not** use any `GlyphRenderer` names in new code.
+- Migrate any pre-Phase-B code to `doku::text` equivalents (TextSystem high-level preferred).
+- Low-level `DokuText` / `GlyphAtlasCache` is "advanced" not "legacy" — it remains supported for custom integrations.
+
+See `docs/text_backend_contract.md` § "Migration Plan" and `ROADMAP.md` for full context.
 
 ---
 

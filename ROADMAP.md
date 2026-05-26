@@ -61,6 +61,14 @@ This roadmap outlines the evolution of DokuText from a color glyph renderer to a
   - [x] CMake target DokuText::DokuText
   - [x] examples/tests updated to DokuText API
 
+- [x] **L1 Polish (API Inventory & Legacy Docs, this cleanup)**
+  - [x] Public API categorized (recommended / advanced / legacy)
+  - [x] DokuText alias header coverage verified for all DokuEngine needs (TextSystem, caret/hit-test/selection, MaterialKind, upload plans, diagnostics, revisions)
+  - [x] Recommended paths (Baked static vs TextAtlas dynamic + TextInput support) documented
+  - [x] Legacy GlyphRenderer handling clarified (L1-L3 deprecation plan); only historical notes remain
+  - [x] Examples/tests inventory + TextInput / renderer contract reconfirmed
+  - No breaking changes, no renames, no new deprecation macros yet
+
 - [ ] **Phase C: DokuEngine Adapter**
   - [ ] UiFontAtlas adapter
   - [ ] atlas metadata bridge
