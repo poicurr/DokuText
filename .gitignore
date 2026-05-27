@@ -39,3 +39,7 @@ build/
 build-*/
 .cache/
 /logs/
+
+# Large binary test fonts (required only for running tests/examples locally)
+fonts/
+
