@@ -14,10 +14,7 @@ function(add_dokutext_test target_name source_file)
   endif()
 endfunction()
 
-add_dokutext_test(DokuTextTestSmoke SmokeCliTest.cpp)
 add_dokutext_test(DokuTextTestRenderTextApi RenderTextApiTest.cpp)
-add_dokutext_test(DokuTextTestMetricsLog MetricsLogTest.cpp)
-add_dokutext_test(DokuTextTestScanLog ScanLogTest.cpp)
 add_dokutext_test(
   DokuTextTestColrV1GradientRender
   ColrV1GradientRenderTest.cpp

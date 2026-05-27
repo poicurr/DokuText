@@ -1,9 +1,7 @@
 # DokuText Backend Contract
 
 ## 1. Purpose
-DokuText is a comprehensive text shaping, layout, and atlas management backend for DokuEngine and other embeddable applications. It provides a bridge between raw font files and renderer-agnostic draw submissions.
-
-Historical Note: This project was formerly known as *GlyphRenderer*.
+DokuText is a comprehensive text shaping, layout, and atlas management backend. It provides a bridge between raw font files and renderer-agnostic draw submissions.
 
 ## 2. Naming
 

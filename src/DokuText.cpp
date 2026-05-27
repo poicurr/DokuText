@@ -4624,6 +4624,8 @@ TextSystem::layoutTextParagraph(const BakedTextAtlas &atlas,
   return result;
 }
 
+#if DOKU_TEXT_BUILD_CLI
+
 [[nodiscard]] std::string defaultFontPath() {
   return "fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf";
 }
@@ -5089,6 +5091,9 @@ int runCli(int argc, char *argv[]) {
   }
   return runCli(args);
 }
+
+
+#endif // DOKU_TEXT_BUILD_CLI
 
 std::span<const TextCaretBoundary> caretBoundaries(const TextLineLayout &line) {
   return line.caretBoundaries;
