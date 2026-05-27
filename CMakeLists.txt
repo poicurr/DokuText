@@ -95,14 +95,20 @@ if (WIN32)
   target_compile_definitions(DokuText PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 endif()
 if (DOKU_TEXT_BUILD_CLI)
-  add_executable(app
-    src/cli_main.cpp
+  # The optional CLI tool for development and diagnostics.
+  # It is intentionally built separately and does not pollute the library.
+  add_executable(DokuTextCli
+    src/cli/main.cpp
+    src/DokuText.cpp
   )
-  target_link_libraries(app PRIVATE DokuText::DokuText)
-  target_compile_features(app PRIVATE cxx_std_20)
+  set_target_properties(DokuTextCli PROPERTIES OUTPUT_NAME "dokutext-cli")
+  target_include_directories(DokuTextCli PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_link_libraries(DokuTextCli PRIVATE DokuText::DokuText)
+  target_compile_features(DokuTextCli PRIVATE cxx_std_20)
   if (WIN32)
-    target_compile_definitions(app PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_definitions(DokuTextCli PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
   endif()
+  target_compile_definitions(DokuTextCli PRIVATE DOKU_TEXT_BUILD_CLI=1)
 endif()
 
 if (DOKU_TEXT_BUILD_EXAMPLES)

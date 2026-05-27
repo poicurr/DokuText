@@ -1,9 +1,7 @@
 # DokuText Backend Contract
 
 ## 1. Purpose
-DokuText is a comprehensive text shaping, layout, and atlas management backend for DokuEngine and other embeddable applications. It provides a bridge between raw font files and renderer-agnostic draw submissions.
-
-**Legacy Note**: This project was formerly known as *GlyphRenderer*. The `glyphrenderer` namespace, old `<GlyphRenderer/...>` include paths, and `GlyphRenderer::GlyphRenderer` CMake target no longer exist in the source tree (see Migration Plan Phase B). Current and future integrations use **DokuText** exclusively. See "Legacy Cleanup Phases (L1-L3)" below.
+DokuText is a comprehensive text shaping, layout, and atlas management backend. It provides a bridge between raw font files and renderer-agnostic draw submissions.
 
 ## 2. Naming
 
@@ -214,14 +212,13 @@ This is a DokuText-side synchronous atlas update path.
 
 ### Runtime budgeted integration guidance
 
-Runtime UI では `allowGlyphAppend = false` を基本とし、欠落 glyph は非破壊経路で検出してから
-DokuEngine 側の adapter が予算付きで append することを推奨します。
+For runtime UI, it is recommended to call with `allowGlyphAppend = false` by default, detect missing glyphs through a non-destructive path, and let the engine-side adapter perform budgeted appends.
 
-- `TextPrepareOptions.allowGlyphAppend = false` で `prepareLine` / `prepareText` を実行し、描画を構築しつつ atlas 変更を抑止する
-- `probeText` で不足 glyph を検出する
-- `buildTextAtlasAppendPlan` で不足候補から実行計画を作成する（`TextAtlasAppendBudget` / `TextAtlasAppendPlan`）
-- `TextAtlas::glyphSetRevision` / `TextAtlas::atlasTextureRevision` を監視し、cache 無効化と renderer 同期待ちに反映する
-- adapter が budget 内で `seedAtlas` / `prepare... (allowGlyphAppend = true)` を実行し、`AtlasPageUploadPlan` の dirty rect だけを GPU 更新する
+- Call `prepareLine` / `prepareText` with `TextPrepareOptions.allowGlyphAppend = false` to obtain draw results while suppressing atlas mutations.
+- Use `probeText` to discover missing glyphs.
+- Use `buildTextAtlasAppendPlan` to create an execution plan from candidates (`TextAtlasAppendBudget` / `TextAtlasAppendPlan`).
+- Monitor `TextAtlas::glyphSetRevision` / `TextAtlas::atlasTextureRevision` for cache invalidation and renderer synchronization.
+- Within budget, the adapter calls `seedAtlas` / `prepare... (allowGlyphAppend = true)` and updates only the dirty rects in `AtlasPageUploadPlan` to the GPU.
 
 ### DokuText contracts currently available
 
@@ -245,63 +242,19 @@ DokuEngine 側の adapter が予算付きで append することを推奨しま�
 
 `TextAtlas` exposes:
 
-- `glyphSetRevision()`: glyph set の論理的変化を表す
-- `atlasTextureRevision()`: atlas 画像内容更新を表す
+- `glyphSetRevision()`: represents logical changes to the glyph set.
+- `atlasTextureRevision()`: represents updates to atlas image contents.
 
-`glyphSetRevision` は `evictedHandles` / `updatedEntries` の変化を追跡し、prepared text cache などの無効化トリガになります。
+`glyphSetRevision` tracks changes via `evictedHandles` / `updatedEntries` and acts as an invalidation trigger for prepared text caches and similar structures.
 
-`atlasTextureRevision` は `newPages` / `dirtyRects` の発生を追跡し、renderer への再アップロードトリガになります。
+`atlasTextureRevision` tracks the appearance of `newPages` / `dirtyRects` and acts as a trigger for re-uploading to the renderer.
 
 ### Planned DokuEngine integration revisions
 
-`DokuEngine` 側 adapter では上記 revision 概念を使って `UiTextCache` の invalidation と renderer texture sync の境界を分離してください。
+Engine-side adapters should use the above revision concepts to separate `UiTextCache` invalidation boundaries from renderer texture synchronization.
 
 Missing glyph states must not be permanently cached because fallback chains, font reloads, atlas updates, or dynamic append may later resolve them.
 
-## 12. Migration Plan
+## 12. Historical Notes
 
-- **Phase A: Documentation & Naming**
-  - Repository name DokuText.
-  - text backend contract.
-  - renderer contract.
-
-- **Phase B: Clean DokuText API Migration**
-  - public header <DokuText/DokuText.hpp>.
-  - namespace doku::text.
-  - CMake target DokuText::DokuText.
-  - examples/tests updated to DokuText API.
-
-- **Phase C: DokuEngine Adapter**
-  - UiFontAtlas adapter.
-  - atlas metadata bridge.
-  - text cache invalidation bridge.
-
-- **Phase D: Budgeted Dynamic Atlas Integration**
-  - pending missing glyph queue.
-  - max glyphs per frame.
-  - dirty rect GPU updates.
-
-## Legacy Cleanup Phases (L1-L3) — API Polish 2026
-
-This cleanup round (API inventory, docs, alias coverage) completes **L1** without any breaking changes or physical renames.
-
-- **L1 (Docs & Inventory, current)**: 
-  - Public API surface fully documented as DokuText high-level recommended.
-  - Legacy GlyphRenderer references reduced to historical notes only.
-  - Recommended paths (static Baked vs dynamic TextAtlas vs low-level GlyphAtlasCache) clarified in README and this document.
-  - No code changes, no deprecation macros, no removals.
-  - DokuEngine-facing APIs (TextSystem, caret/hit-test, MaterialKind, upload plans, revisions, compatibility) confirmed stable and covered by `<DokuText/DokuText.hpp>`.
-
-- **L2 (Future, non-breaking)**:
-  - Introduce `[[deprecated("Use ...")]]` or a `DOKU_TEXT_DEPRECATED` macro for any transitional symbols if needed (currently none required).
-  - Add deprecation comments to hypothetical old include paths.
-  - Possibly provide thin compatibility headers (opt-in) that emit warnings.
-  - Update any downstream CMake find_package examples.
-
-- **L3 (Major version only)**:
-  - Removal of any remaining legacy symbols after a deprecation window (e.g. 1-2 minor releases).
-  - At that point, `glyphrenderer` namespace and old targets would be gone forever.
-
-**Rule**: Old API removal **always** requires explicit deprecation phase. No direct deletion of symbols used by DokuEngine or external embedders.
-
-See README "Legacy & Deprecation Policy" for user guidance.
+This document reflects the current public contract. Earlier development focused on COLRv0/COLRv1 emoji rasterization and incremental atlas features. Future changes to the API will be documented here.

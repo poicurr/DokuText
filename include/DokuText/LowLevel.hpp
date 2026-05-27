@@ -160,10 +160,6 @@ private:
   std::unique_ptr<Impl> m_impl;
 };
 
-int runCli(const std::vector<std::string> &args);
-
-int runCli(int argc, char *argv[]);
-
 [[nodiscard]] TextCompatibilityReport
 analyzeTextCompatibility(const TextLineLayout &layout);
 

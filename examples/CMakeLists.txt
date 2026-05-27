@@ -12,10 +12,6 @@ endfunction()
 
 add_dokutext_example(DokuTextExampleBasic BasicEmbedding.cpp)
 add_dokutext_example(
-  DokuTextExampleMetricsLog
-  MetricsLogEmbedding.cpp
-)
-add_dokutext_example(
   DokuTextExampleEngineSession
   EngineSessionEmbedding.cpp
 )
