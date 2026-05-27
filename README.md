@@ -1,8 +1,8 @@
 # DokuText
 
-**DokuText** is a C++ library for text shaping, layout, COLRv0/COLRv1 color glyph rasterization, and atlas management.
+**DokuText** is a C++ library for text shaping, layout, and high-quality emoji rasterization.
 
-It converts fonts + UTF-8 text into draw commands and atlas textures that are independent of any specific renderer.
+It provides strong support for both COLRv0 and COLRv1 color glyphs, complex script shaping, and efficient atlas management, producing renderer-agnostic draw commands and textures.
 
 ## Quick Start
 

@@ -216,8 +216,8 @@ void accumulateColrV1Stats(ColrV1RenderStats &dst,
     return 0U;
   }
   if (paletteIndex >= paletteCount) {
-    std::cerr << "警告: パレットインデックス " << paletteIndex
-              << " は範囲外のため 0 に切り替えます\n";
+    std::cerr << "Warning: palette index " << paletteIndex
+              << " is out of range, falling back to 0\n";
     return 0U;
   }
   return paletteIndex;
@@ -307,7 +307,7 @@ resolveExistingPath(std::initializer_list<std::string> candidates) {
     stream << candidate;
     first = false;
   }
-  throw std::runtime_error("フォントが見つかりません: " + stream.str());
+  throw std::runtime_error("Font not found: " + stream.str());
 }
 
 [[nodiscard]] std::vector<std::uint32_t> decodeUtf8(const std::string &text) {
@@ -331,15 +331,15 @@ resolveExistingPath(std::initializer_list<std::string> candidates) {
       codePoint = lead & 0x07U;
       sequenceLength = 4;
     } else {
-      throw std::runtime_error("UTF-8のデコードに失敗しました");
+      throw std::runtime_error("Failed to decode UTF-8");
     }
     if (index + sequenceLength > text.size()) {
-      throw std::runtime_error("UTF-8が途中で途切れています");
+      throw std::runtime_error("UTF-8 sequence was truncated");
     }
     for (std::size_t i = 1; i < sequenceLength; ++i) {
       const unsigned char trail = bytes[index + i];
       if ((trail & 0xC0U) != 0x80U) {
-        throw std::runtime_error("UTF-8の継続バイトが不正です");
+        throw std::runtime_error("Invalid UTF-8 continuation byte");
       }
       codePoint = (codePoint << 6U) | (trail & 0x3FU);
     }
@@ -446,22 +446,22 @@ encodeUtf8(const std::vector<std::uint32_t> &codePoints) {
                                           unsigned int pixelSize) {
   FT_Face faceRaw = nullptr;
   if (FT_New_Face(library, fontPath.c_str(), 0, &faceRaw) != 0) {
-    throw std::runtime_error("フォント読み込みに失敗しました: " + fontPath);
+    throw std::runtime_error("Failed to load font: " + fontPath);
   }
   FreeTypeFaceHandle face(faceRaw);
   if (FT_Set_Pixel_Sizes(face.get(), 0, pixelSize) != 0) {
-    throw std::runtime_error("ピクセルサイズ設定に失敗しました: " + fontPath);
+    throw std::runtime_error("Failed to set pixel size: " + fontPath);
   }
 
   hb_face_t *hbFaceRaw = hb_ft_face_create_referenced(face.get());
   if (hbFaceRaw == nullptr) {
-    throw std::runtime_error("hb_face_tの生成に失敗しました: " + fontPath);
+    throw std::runtime_error("Failed to create hb_face_t: " + fontPath);
   }
   HbFaceHandle hbFace(hbFaceRaw);
 
   hb_font_t *hbFontRaw = hb_ft_font_create_referenced(face.get());
   if (hbFontRaw == nullptr) {
-    throw std::runtime_error("hb_font_tの生成に失敗しました: " + fontPath);
+    throw std::runtime_error("Failed to create hb_font_t: " + fontPath);
   }
   HbFontHandle hbFont(hbFontRaw);
 
@@ -540,7 +540,7 @@ clusterText(const std::vector<std::uint32_t> &codePoints) {
 shapeTextCluster(FontContext &font, const TextCluster &cluster) {
   hb_buffer_t *hbBufferRaw = hb_buffer_create();
   if (hbBufferRaw == nullptr) {
-    throw std::runtime_error("hb_buffer_tの生成に失敗しました");
+    throw std::runtime_error("Failed to create hb_buffer_t");
   }
   HbBufferHandle hbBuffer(hbBufferRaw);
   const std::string text = encodeUtf8(cluster.m_codePoints);
@@ -551,7 +551,7 @@ shapeTextCluster(FontContext &font, const TextCluster &cluster) {
 
   const unsigned int glyphCount = hb_buffer_get_length(hbBuffer.get());
   if (glyphCount == 0U) {
-    throw std::runtime_error("描画対象のグリフが得られませんでした");
+    throw std::runtime_error("Failed to obtain glyph for rendering");
   }
   const hb_glyph_info_t *glyphInfos =
       hb_buffer_get_glyph_infos(hbBuffer.get(), nullptr);
@@ -575,10 +575,10 @@ shapeTextCluster(FontContext &font, const TextCluster &cluster) {
 [[nodiscard]] GlyphSurface renderMonochromeGlyph(FT_Face face,
                                                  hb_codepoint_t glyphId) {
   if (FT_Load_Glyph(face, glyphId, FT_LOAD_DEFAULT) != 0) {
-    throw std::runtime_error("FT_Load_Glyph に失敗しました");
+    throw std::runtime_error("FT_Load_Glyph failed");
   }
   if (FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL) != 0) {
-    throw std::runtime_error("FT_Render_Glyph に失敗しました");
+    throw std::runtime_error("FT_Render_Glyph failed");
   }
 
   const FT_GlyphSlot slot = face->glyph;
@@ -661,7 +661,7 @@ shapeTextCluster(FontContext &font, const TextCluster &cluster) {
           break;
         }
         default:
-          throw std::runtime_error("未対応のFT_Bitmap pixel_modeです");
+          throw std::runtime_error("Unsupported FT_Bitmap pixel_mode");
       }
     }
   }
@@ -671,7 +671,7 @@ shapeTextCluster(FontContext &font, const TextCluster &cluster) {
 [[nodiscard]] GlyphSurface renderEmbeddedGlyph(FT_Face face,
                                                hb_codepoint_t glyphId) {
   if (FT_Load_Glyph(face, glyphId, FT_LOAD_COLOR | FT_LOAD_DEFAULT) != 0) {
-    throw std::runtime_error("FT_Load_Glyph(FT_LOAD_COLOR) に失敗しました");
+    throw std::runtime_error("FT_Load_Glyph(FT_LOAD_COLOR) failed");
   }
   const FT_GlyphSlot slot = face->glyph;
   if (slot->format == FT_GLYPH_FORMAT_BITMAP) {
@@ -679,10 +679,10 @@ shapeTextCluster(FontContext &font, const TextCluster &cluster) {
   }
   if (slot->format == FT_GLYPH_FORMAT_SVG) {
     throw std::runtime_error(
-        "SVG glyph は未対応です。SVG レンダラの追加が必要です");
+        "SVG glyphs are not supported. An SVG renderer is required.");
   }
   if (FT_Render_Glyph(slot, FT_RENDER_MODE_NORMAL) != 0) {
-    throw std::runtime_error("FT_Render_Glyph に失敗しました");
+    throw std::runtime_error("FT_Render_Glyph failed");
   }
   return renderBitmapSlot(slot);
 }
@@ -741,7 +741,7 @@ renderGlyphCluster(FontContext &font, const TextCluster &cluster,
                    unsigned int paletteIndex, GlyphRenderCache &glyphCache,
                    CacheStats &cacheStats, const ColrV1RenderOptions &options) {
   if (shapedGlyphs.empty()) {
-    throw std::runtime_error("クラスタのシェーピング結果が空です");
+    throw std::runtime_error("Shaping result for the cluster is empty");
   }
   ClusterRenderResult result;
 
@@ -856,11 +856,11 @@ renderGlyphCluster(FontContext &font, const TextCluster &cluster,
 
 [[nodiscard]] unsigned int parseUnsigned(const char *value, const char *label) {
   if (value == nullptr) {
-    throw std::invalid_argument(std::string(label) + " が未指定です");
+    throw std::invalid_argument(std::string(label) + " is not specified");
   }
   const unsigned long parsed = std::stoul(value);
   if (parsed > std::numeric_limits<unsigned int>::max()) {
-    throw std::out_of_range(std::string(label) + " が大きすぎます");
+    throw std::out_of_range(std::string(label) + " is too large");
   }
   return static_cast<unsigned int>(parsed);
 }
@@ -892,7 +892,7 @@ renderGlyphCluster(FontContext &font, const TextCluster &cluster,
   }
   bool ok = true;
   if (result.m_surface.m_advance != expectedAdvance) {
-    std::cerr << "cluster advance不一致"
+    std::cerr << "cluster advance mismatch"
               << " expected=" << expectedAdvance
               << " actual=" << result.m_surface.m_advance << " cluster=";
     for (std::uint32_t codePoint : cluster.m_codePoints) {
@@ -902,7 +902,7 @@ renderGlyphCluster(FontContext &font, const TextCluster &cluster,
     ok = false;
   }
   if (expectedYAdvance != 0) {
-    std::cerr << "警告: yAdvance を含むクラスタは未検証です"
+    std::cerr << "Warning: clusters containing yAdvance are not verified"
               << " expectedYAdvance=" << expectedYAdvance << '\n';
   }
   return ok;
@@ -1624,10 +1624,10 @@ makeTextLayoutContext(const TextRequest &request) {
 buildAtlasLayout(const TextLineLayout &layout,
                  const AtlasBuildContext &context) {
   if (context.pageWidth <= 0 || context.pageHeight <= 0) {
-    throw std::invalid_argument("atlas page size が不正です");
+    throw std::invalid_argument("invalid atlas page size");
   }
   if (context.padding < 0) {
-    throw std::invalid_argument("atlas padding が不正です");
+    throw std::invalid_argument("invalid atlas padding");
   }
 
   AtlasBuildResult result;
@@ -1719,7 +1719,7 @@ public:
   Impl() {
     FT_Library libraryRaw = nullptr;
     if (FT_Init_FreeType(&libraryRaw) != 0) {
-      throw std::runtime_error("FreeTypeの初期化に失敗しました");
+      throw std::runtime_error("Failed to initialize FreeType");
     }
     m_library.reset(libraryRaw);
   }
@@ -1748,7 +1748,7 @@ public:
     }
     const auto it = m_fontChains.find(fontChainId.value);
     if (it == m_fontChains.end()) {
-      throw std::invalid_argument("未知の FontChainId が指定されました");
+      throw std::invalid_argument("Unknown FontChainId specified");
     }
     return it->second;
   }
@@ -1767,7 +1767,7 @@ public:
   TextShapeResult shapeLine(const TextLayoutContext &layoutContext,
                             std::string_view text) const {
     if (text.empty()) {
-      throw std::invalid_argument("text が空です");
+      throw std::invalid_argument("text is empty");
     }
     TextShapeResult result;
     result.text = std::string(text);
@@ -2327,7 +2327,7 @@ private:
     const std::vector<std::uint32_t> codePoints = decodeUtf8(std::string(text));
     const std::vector<TextCluster> clusters = clusterText(codePoints);
     if (clusters.empty()) {
-      throw std::runtime_error("描画対象のクラスタが得られませんでした");
+      throw std::runtime_error("Failed to obtain cluster for rendering");
     }
 
     std::vector<ResolvedShapedCluster> resolvedClusters;
@@ -2434,10 +2434,10 @@ class GlyphAtlasCache::Impl {
 public:
   explicit Impl(const AtlasBuildContext &context) : m_context(context) {
     if (m_context.pageWidth <= 0 || m_context.pageHeight <= 0) {
-      throw std::invalid_argument("atlas page size が不正です");
+      throw std::invalid_argument("invalid atlas page size");
     }
     if (m_context.padding < 0) {
-      throw std::invalid_argument("atlas padding が不正です");
+      throw std::invalid_argument("invalid atlas padding");
     }
   }
 
@@ -2527,7 +2527,7 @@ public:
 
   [[nodiscard]] TextAtlasPageInfo pageInfo(std::size_t pageIndex) const {
     if (pageIndex >= m_pages.size()) {
-      throw std::out_of_range("pageIndex が範囲外です");
+      throw std::out_of_range("pageIndex out of range");
     }
     TextAtlasPageInfo info;
     info.page = m_pages[pageIndex].handle;
@@ -2550,7 +2550,7 @@ public:
 
   [[nodiscard]] MaterialKind materialKindForPage(std::size_t pageIndex) const {
     if (pageIndex >= m_pageMaterialKinds.size()) {
-      throw std::out_of_range("pageIndex が範囲外です");
+      throw std::out_of_range("pageIndex out of range");
     }
     return m_pageMaterialKinds[pageIndex];
   }
@@ -4039,7 +4039,7 @@ AtlasUvOrigin BakedTextAtlas::uvOrigin() const { return atlasUvOrigin(); }
 AtlasPixelFormat
 BakedTextAtlas::pixelFormatForPage(std::size_t pageIndex) const {
   if (pageIndex >= m_impl->m_pagePixelFormats.size()) {
-    throw std::out_of_range("pageIndex が範囲外です");
+    throw std::out_of_range("pageIndex out of range");
   }
   return m_impl->m_pagePixelFormats[pageIndex];
 }
@@ -4047,7 +4047,7 @@ BakedTextAtlas::pixelFormatForPage(std::size_t pageIndex) const {
 const std::vector<MaterialKind> &
 BakedTextAtlas::materialKindsForPage(std::size_t pageIndex) const {
   if (pageIndex >= m_impl->m_pageMaterialKinds.size()) {
-    throw std::out_of_range("pageIndex が範囲外です");
+    throw std::out_of_range("pageIndex out of range");
   }
   return m_impl->m_pageMaterialKinds[pageIndex];
 }
@@ -4668,7 +4668,7 @@ int runCli(const std::vector<std::string> &args) {
       if (flag == "--scan-colrv1-top") {
         ++argIndex;
         if (argIndex >= args.size()) {
-          throw std::invalid_argument("--scan-colrv1-top の値が未指定です");
+          throw std::invalid_argument("--scan-colrv1-top value is missing");
         }
         scanTopCount =
             parseUnsigned(args[argIndex++].c_str(), "--scan-colrv1-top");
@@ -4677,7 +4677,7 @@ int runCli(const std::vector<std::string> &args) {
       if (flag == "--scan-colrv1-limit") {
         ++argIndex;
         if (argIndex >= args.size()) {
-          throw std::invalid_argument("--scan-colrv1-limit の値が未指定です");
+          throw std::invalid_argument("--scan-colrv1-limit value is missing");
         }
         scanLimit =
             parseUnsigned(args[argIndex++].c_str(), "--scan-colrv1-limit");
@@ -4687,7 +4687,7 @@ int runCli(const std::vector<std::string> &args) {
         ++argIndex;
         if (argIndex >= args.size()) {
           throw std::invalid_argument(
-              "--scan-colrv1-min-paints の値が未指定です");
+              "--scan-colrv1-min-paints value is missing");
         }
         scanFilters.m_minPaints =
             parseUnsigned(args[argIndex++].c_str(), "--scan-colrv1-min-paints");
@@ -4697,7 +4697,7 @@ int runCli(const std::vector<std::string> &args) {
         ++argIndex;
         if (argIndex >= args.size()) {
           throw std::invalid_argument(
-              "--scan-colrv1-min-gradients の値が未指定です");
+              "--scan-colrv1-min-gradients value is missing");
         }
         scanFilters.m_minGradients = parseUnsigned(
             args[argIndex++].c_str(), "--scan-colrv1-min-gradients");
@@ -4707,7 +4707,7 @@ int runCli(const std::vector<std::string> &args) {
         ++argIndex;
         if (argIndex >= args.size()) {
           throw std::invalid_argument(
-              "--scan-colrv1-min-composites の値が未指定です");
+              "--scan-colrv1-min-composites value is missing");
         }
         scanFilters.m_minComposites = parseUnsigned(
             args[argIndex++].c_str(), "--scan-colrv1-min-composites");
@@ -4717,7 +4717,7 @@ int runCli(const std::vector<std::string> &args) {
         ++argIndex;
         if (argIndex >= args.size()) {
           throw std::invalid_argument(
-              "--scan-colrv1-min-transforms の値が未指定です");
+              "--scan-colrv1-min-transforms value is missing");
         }
         scanFilters.m_minTransforms = parseUnsigned(
             args[argIndex++].c_str(), "--scan-colrv1-min-transforms");
@@ -4736,7 +4736,7 @@ int runCli(const std::vector<std::string> &args) {
       if (flag == "--glyph-id") {
         ++argIndex;
         if (argIndex >= args.size()) {
-          throw std::invalid_argument("--glyph-id の値が未指定です");
+          throw std::invalid_argument("--glyph-id value is missing");
         }
         glyphIdToRender = parseUnsigned(args[argIndex++].c_str(), "--glyph-id");
         renderGlyphIdMode = true;
@@ -4746,7 +4746,7 @@ int runCli(const std::vector<std::string> &args) {
     }
     if (listColrGlyphs && verifyMetricsFlag) {
       throw std::invalid_argument(
-          "--list-colr と --verify-metrics は同時指定できません");
+          "--list-colr and --verify-metrics cannot be specified together");
     }
     if (scanColrV1Glyphs && (listColrGlyphs || verifyMetricsFlag)) {
       throw std::invalid_argument("--scan-colrv1 は --list-colr / "
@@ -4754,7 +4754,7 @@ int runCli(const std::vector<std::string> &args) {
     }
     if (renderGlyphIdMode && listColrGlyphs) {
       throw std::invalid_argument(
-          "--glyph-id は --list-colr と同時指定できません");
+          "--glyph-id cannot be used together with --list-colr");
     }
     if (!scanColrV1Glyphs &&
         (scanTopCount != 10 || scanLimit != 0 || scanFilters.m_minPaints != 0 ||
@@ -4793,7 +4793,7 @@ int runCli(const std::vector<std::string> &args) {
 
     FT_Library libraryRaw = nullptr;
     if (FT_Init_FreeType(&libraryRaw) != 0) {
-      throw std::runtime_error("FreeTypeの初期化に失敗しました");
+      throw std::runtime_error("Failed to initialize FreeType");
     }
     FreeTypeLibraryHandle library(libraryRaw);
     FontContext emojiFont = makeFontContext(library.get(), fontPath, pixelSize);
@@ -4804,9 +4804,9 @@ int runCli(const std::vector<std::string> &args) {
 
     const bool hasColrV0 = hb_ot_color_has_layers(emojiFont.m_hbFace.get());
     const bool hasColrV1 = hb_ot_color_has_paint(emojiFont.m_hbFace.get());
-    std::cout << "COLRv0レイヤー対応: " << (hasColrV0 ? "あり" : "なし")
+    std::cout << "COLRv0 layers supported: " << (hasColrV0 ? "yes" : "no")
               << '\n';
-    std::cout << "COLRv1ペイント対応: " << (hasColrV1 ? "あり" : "なし")
+    std::cout << "COLRv1 paint supported: " << (hasColrV1 ? "yes" : "no")
               << '\n';
     if (listColrGlyphs && !hasColrV0 && !hasColrV1) {
       throw std::runtime_error("COLR情報が含まれていません");
@@ -4847,7 +4847,7 @@ int runCli(const std::vector<std::string> &args) {
         if (layerCount > 0) {
           std::cout << " : layerCount = " << layerCount;
           if (glyphHasV1) {
-            std::cout << " / COLRv1ペイントあり";
+            std::cout << " / COLRv1ペイントyes";
           }
           std::cout << '\n';
         } else {
@@ -4958,11 +4958,11 @@ int runCli(const std::vector<std::string> &args) {
 
     const std::vector<std::uint32_t> codePoints = decodeUtf8(text);
     if (codePoints.empty()) {
-      throw std::runtime_error("描画対象のグリフが得られませんでした");
+      throw std::runtime_error("Failed to obtain glyph for rendering");
     }
     const std::vector<TextCluster> clusters = clusterText(codePoints);
     if (clusters.empty()) {
-      throw std::runtime_error("描画対象のクラスタが得られませんでした");
+      throw std::runtime_error("Failed to obtain cluster for rendering");
     }
 
     GlyphRenderCache emojiGlyphCache;
@@ -5063,7 +5063,7 @@ int runCli(const std::vector<std::string> &args) {
     }
 
     if (exportedCount == 0) {
-      throw std::runtime_error("COLR描画に成功したグリフがありません");
+      throw std::runtime_error("COLR描画に成功したグリフがyesません");
     }
 
     if (verifyMetricsFlag) {
