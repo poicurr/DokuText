@@ -10,6 +10,8 @@
 #include <stdexcept>
 #include <unordered_set>
 
+#include "TestUtils.hpp"
+
 namespace {
 struct FreeTypeLibrary {
   FT_Library library = nullptr;
@@ -97,6 +99,8 @@ struct FreeTypeFace {
 } // namespace
 
 int main() {
+  doku_test::skipIfTestFontsMissing();
+
   constexpr auto FONT_PATH =
       "fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf";
   constexpr std::uint32_t GRADIENT_HEAVY_GLYPH_ID = 53;

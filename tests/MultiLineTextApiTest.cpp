@@ -2,7 +2,11 @@
 
 #include <iostream>
 
+#include "TestUtils.hpp"
+
 int main() {
+  doku_test::skipIfTestFontsMissing();
+
   std::cout << "[test] multi-line text api\n";
 
   doku::text::DokuTextContext context;

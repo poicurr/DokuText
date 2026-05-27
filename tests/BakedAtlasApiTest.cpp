@@ -2,7 +2,11 @@
 
 #include <iostream>
 
+#include "TestUtils.hpp"
+
 int main() {
+  doku_test::skipIfTestFontsMissing();
+
   std::cout << "[test] baked atlas api\n";
   const doku::text::TextSeedPresetInfo japaneseInfo =
       doku::text::describeTextSeedPreset(

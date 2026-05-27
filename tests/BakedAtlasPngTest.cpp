@@ -5,6 +5,8 @@
 #include <filesystem>
 #include <iostream>
 
+#include "TestUtils.hpp"
+
 namespace {
 
 [[nodiscard]] Bitmap toBitmap(const doku::text::BitmapImage &image) {
@@ -17,6 +19,8 @@ namespace {
 } // namespace
 
 int main() {
+  doku_test::skipIfTestFontsMissing();
+
   std::cout << "[test] baked atlas png\n";
 
   doku::text::TextSystem textSystem;

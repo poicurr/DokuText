@@ -14,27 +14,35 @@ function(add_dokutext_test target_name source_file)
   endif()
 endfunction()
 
-add_dokutext_test(DokuTextTestRenderTextApi RenderTextApiTest.cpp)
-add_dokutext_test(
+# Mark a test as requiring the large external test fonts.
+# The test must call doku_test::skipIfTestFontsMissing() early in main().
+function(add_dokutext_test_with_fonts target_name source_file)
+  add_dokutext_test(${target_name} ${source_file})
+  set_tests_properties(${target_name} PROPERTIES SKIP_RETURN_CODE 77)
+  target_include_directories(${target_name} PRIVATE ${CMAKE_SOURCE_DIR}/tests)
+endfunction()
+
+add_dokutext_test_with_fonts(DokuTextTestRenderTextApi RenderTextApiTest.cpp)
+add_dokutext_test_with_fonts(
   DokuTextTestColrV1GradientRender
   ColrV1GradientRenderTest.cpp
 )
-add_dokutext_test(
+add_dokutext_test_with_fonts(
   DokuTextTestFallbackDiagnostics
   FallbackDiagnosticsTest.cpp
 )
-add_dokutext_test(
+add_dokutext_test_with_fonts(
   DokuTextTestShapeLayoutAtlas
   ShapeLayoutAtlasTest.cpp
 )
-add_dokutext_test(
+add_dokutext_test_with_fonts(
   DokuTextTestMultiLineTextApi
   MultiLineTextApiTest.cpp
 )
-add_dokutext_test(DokuTextTestAtlasCacheApi AtlasCacheApiTest.cpp)
+add_dokutext_test_with_fonts(DokuTextTestAtlasCacheApi AtlasCacheApiTest.cpp)
 if(DOKU_TEXT_ENABLE_PNG_IO)
-  add_dokutext_test(DokuTextTestVisualPng VisualPngScenarioTest.cpp)
-  add_dokutext_test(DokuTextTestBakedAtlasPng BakedAtlasPngTest.cpp)
+  add_dokutext_test_with_fonts(DokuTextTestVisualPng VisualPngScenarioTest.cpp)
+  add_dokutext_test_with_fonts(DokuTextTestBakedAtlasPng BakedAtlasPngTest.cpp)
   target_include_directories(
     DokuTextTestVisualPng PRIVATE ${CMAKE_SOURCE_DIR}/src
   )
@@ -44,27 +52,27 @@ if(DOKU_TEXT_ENABLE_PNG_IO)
 endif()
 
 add_dokutext_test(DokuTextTestEmptyFallback EmptyFallbackTest.cpp)
-add_dokutext_test(
+add_dokutext_test_with_fonts(
   DokuTextTestIntegrationAdapter
   IntegrationAdapterTest.cpp
 )
-add_dokutext_test(
+add_dokutext_test_with_fonts(
   DokuTextTestTextSystemFacade
   TextSystemFacadeTest.cpp
 )
-add_dokutext_test(DokuTextTestBakedAtlasApi BakedAtlasApiTest.cpp)
-add_dokutext_test(
+add_dokutext_test_with_fonts(DokuTextTestBakedAtlasApi BakedAtlasApiTest.cpp)
+add_dokutext_test_with_fonts(
   DokuTextTestDynamicAtlasSeedIdempotency
   DynamicAtlasSeedIdempotencyTest.cpp
 )
 add_dokutext_test(DokuTextPublicHeaderSmokeHighLevel DokuTextPublicHeaderSmokeHighLevel.cpp)
 add_dokutext_test(DokuTextPublicHeaderSmokeLowLevel DokuTextPublicHeaderSmokeLowLevel.cpp)
 add_dokutext_test(DokuTextPublicHeaderSmokeGeometry DokuTextPublicHeaderSmokeGeometry.cpp)
-add_dokutext_test(DokuTextTestPageInfo TextAtlasPageInfoTest.cpp)
-add_dokutext_test(DokuTextTestProbeText TextProbeTest.cpp)
+add_dokutext_test_with_fonts(DokuTextTestPageInfo TextAtlasPageInfoTest.cpp)
+add_dokutext_test_with_fonts(DokuTextTestProbeText TextProbeTest.cpp)
 add_dokutext_test(DokuTextPublicHeaderSmoke DokuTextPublicHeaderSmoke.cpp)
-add_dokutext_test(DokuTextTestPrepareAllowGlyphAppend TextPrepareAllowGlyphAppendTest.cpp)
-add_dokutext_test(DokuTextTestTextInputApi TextInputApiTest.cpp)
+add_dokutext_test_with_fonts(DokuTextTestPrepareAllowGlyphAppend TextPrepareAllowGlyphAppendTest.cpp)
+add_dokutext_test_with_fonts(DokuTextTestTextInputApi TextInputApiTest.cpp)
 
 target_include_directories(
   DokuTextTestColrV1GradientRender PRIVATE ${CMAKE_SOURCE_DIR}/src

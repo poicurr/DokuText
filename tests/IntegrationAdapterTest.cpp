@@ -2,7 +2,11 @@
 
 #include <iostream>
 
+#include "TestUtils.hpp"
+
 int main() {
+  doku_test::skipIfTestFontsMissing();
+
   std::cout << "[test] integration adapter api\n";
 
   doku::text::TextSystem textSystem;

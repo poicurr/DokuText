@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "TestUtils.hpp"
+
 namespace {
 
 struct VisualScenario {
@@ -111,6 +113,8 @@ composeParagraph(const doku::text::MultiLineDrawRun &drawRun) {
 } // namespace
 
 int main() {
+  doku_test::skipIfTestFontsMissing();
+
   std::cout << "[test] visual png scenario\n";
 
   doku::text::DokuTextContext context;

@@ -6,6 +6,8 @@
 #include <stdexcept>
 #include <algorithm>
 
+#include "TestUtils.hpp"
+
 using namespace doku::text;
 
 void test_page_info_alpha_mask() {
@@ -190,6 +192,8 @@ void test_upload_plan_mapping() {
 }
 
 int main() {
+    doku_test::skipIfTestFontsMissing();
+
     try {
         test_page_info_alpha_mask();
         test_page_info_color_bitmap();

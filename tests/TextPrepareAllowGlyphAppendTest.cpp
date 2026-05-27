@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "TestUtils.hpp"
+
 using namespace doku::text;
 
 namespace {
@@ -436,6 +438,8 @@ void test_emoji_false_text_request() {
 } // namespace
 
 int main() {
+  doku_test::skipIfTestFontsMissing();
+
   test_prepareLine_false_empty_atlas_string_view();
   test_prepareText_false_empty_atlas_string_view();
   test_prepareLine_false_empty_atlas_text_request();

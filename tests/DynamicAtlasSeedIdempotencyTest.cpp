@@ -4,7 +4,11 @@
 #include <string>
 #include <cassert>
 
+#include "TestUtils.hpp"
+
 int main() {
+    doku_test::skipIfTestFontsMissing();
+
     std::cout << "[test] DynamicAtlasSeedIdempotencyTest\n";
 
     doku::text::TextSystem system;

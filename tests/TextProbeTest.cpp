@@ -5,6 +5,8 @@
 #include <cassert>
 #include <algorithm>
 
+#include "TestUtils.hpp"
+
 namespace {
 
 void assert_true(bool condition, const std::string& message) {
@@ -24,6 +26,8 @@ void assert_eq(std::size_t actual, std::size_t expected, const std::string& mess
 } // namespace
 
 int main() {
+    doku_test::skipIfTestFontsMissing();
+
     std::cout << "[test] TextProbeTest" << std::endl;
 
     doku::text::TextSystem system;

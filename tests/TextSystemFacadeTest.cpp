@@ -2,7 +2,11 @@
 
 #include <iostream>
 
+#include "TestUtils.hpp"
+
 int main() {
+  doku_test::skipIfTestFontsMissing();
+
   std::cout << "[test] text system facade\n";
 
   doku::text::TextSystem textSystem;

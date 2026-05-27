@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "TestUtils.hpp"
+
 namespace {
 
 void require(bool condition, const char *message) {
@@ -62,6 +64,8 @@ void requireMonotonicCaretX(const doku::text::PreparedTextLine &line) {
 } // namespace
 
 int main() {
+  doku_test::skipIfTestFontsMissing();
+
   std::cout << "[test] text input caret/hit-test api\n";
 
   doku::text::TextSystem textSystem;
