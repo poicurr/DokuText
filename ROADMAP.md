@@ -27,9 +27,9 @@ This roadmap outlines the evolution of DokuText from a color glyph renderer to a
 - [x] Seed presets and range requests
 - [x] Synchronous glyph ensure path through `seedAtlas`, `prepareLine`, and `prepareText`
 - [x] Renderer-facing upload plan helpers
-- [x] `TextAtlasAppendBudget` / `TextAtlasAppendPlan`（budget 付き候補抽出）
-- [ ] Budgeted missing glyph queue 実装（DokuEngine adapter 側）
-- [ ] Max glyphs per frame policy（DokuEngine adapter 側）
+- [x] `TextAtlasAppendBudget` / `TextAtlasAppendPlan` (budget-aware candidate selection)
+- [ ] Implement a budgeted missing glyph queue (DokuEngine adapter)
+- [ ] Max glyphs per frame policy (DokuEngine adapter)
 - [ ] Dirty rect incremental GPU upload integration
 - [ ] Atlas page compaction and eviction policy
 
@@ -43,8 +43,8 @@ This roadmap outlines the evolution of DokuText from a color glyph renderer to a
 
 ## 5. DokuEngine Integration
 - [ ] `UiFontAtlas` adapter implementation
-- [ ] `UiTextCache` invalidation via `glyphSetRevision`（インターフェース準備中）
-- [x] `TextAtlas::glyphSetRevision` / `TextAtlas::atlasTextureRevision` の公開
+- [ ] `UiTextCache` invalidation via `glyphSetRevision` (interface in progress)
+- [x] Expose `TextAtlas::glyphSetRevision` / `TextAtlas::atlasTextureRevision`
 - [ ] Asynchronous glyph feeding
 - [ ] Shared atlas management across UI contexts
 
@@ -75,7 +75,7 @@ This roadmap outlines the evolution of DokuText from a color glyph renderer to a
   - [ ] text cache invalidation bridge
 
 - [ ] **Phase D: Budgeted Dynamic Atlas Integration**
-  - [x] `TextAtlasAppendBudget` / `TextAtlasAppendPlan` を公開
+  - [x] Expose `TextAtlasAppendBudget` / `TextAtlasAppendPlan`
   - [ ] pending missing glyph queue
   - [ ] max glyphs per frame
   - [ ] dirty rect GPU updates

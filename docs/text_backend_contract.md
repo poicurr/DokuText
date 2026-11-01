@@ -224,13 +224,13 @@ For runtime UI, it is recommended to call with `allowGlyphAppend = false` by def
 
 `TextAtlasAppendBudget`:
 
-- `maxGlyphs`: `0` で無制限
-- `maxColorGlyphs`: `0` で無制限
-- `maxAtlasUploadBytes`: `0` で無制限
+- `maxGlyphs`: `0` means unlimited
+- `maxColorGlyphs`: `0` means unlimited
+- `maxAtlasUploadBytes`: `0` means unlimited
 
 `TextAtlasAppendPlan`:
 
-- `candidates`: layout 内で欠落した `MissingAtlasGlyph` 候補
+- `candidates`: `MissingAtlasGlyph` candidates identified as missing during layout
 - `estimatedGlyphCount`, `estimatedColorGlyphCount`, `estimatedUploadBytes`
 - `budgetExceeded`
 

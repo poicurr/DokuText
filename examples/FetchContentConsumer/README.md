@@ -1,8 +1,9 @@
 # FetchContentConsumer
 
-外部プロジェクト側から `FetchContent` で `DokuText` を取り込む最小例です。
+A minimal example of integrating `DokuText` into an external project using
+CMake `FetchContent`.
 
-Windows + vcpkg の例:
+Example for Windows with vcpkg:
 
 ```powershell
 cmake -S . -B build -G Ninja `
@@ -10,11 +11,12 @@ cmake -S . -B build -G Ninja `
 cmake --build build
 ```
 
-この例は推奨経路として `TextSystem` / `TextAtlas` を使い、
+This example uses the recommended `TextSystem` / `TextAtlas` API path to
+demonstrate:
 
-- fallback chain 登録
-- atlas seed
-- `prepareLine(...)`
+- Registering a font fallback chain
+- Seeding the atlas
+- Calling `prepareLine(...)`
 
-までを最小構成で呼びます。`DokuTextContext` / `DokuText` /
-`TextLayoutContext` は、より低レベルな制御が必要な場合だけ直接使う想定です。
+The lower-level `DokuTextContext`, `DokuText`, and `TextLayoutContext` APIs
+are intended for direct use when more control is required.
