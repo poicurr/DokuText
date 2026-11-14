@@ -1278,6 +1278,12 @@ void setImageMetrics(GlyphBitmap &glyph, const GlyphImageMetrics &metrics) {
   return uvRect;
 }
 
+[[nodiscard]] bool hasCompleteRgba(const BitmapImage &image) {
+  return image.width > 0 && image.height > 0 &&
+         image.rgba.size() / 4U / static_cast<std::size_t>(image.width) >=
+             static_cast<std::size_t>(image.height);
+}
+
 void blitBitmapImage(BitmapImage &dst, const BitmapImage &src, int offsetX,
                      int offsetY) {
   for (int y = 0; y < src.height; ++y) {
@@ -1662,6 +1668,9 @@ buildAtlasLayout(const TextLineLayout &layout,
     const BitmapImage &image = glyph.glyph.image;
     if (image.width <= 0 || image.height <= 0) {
       continue;
+    }
+    if (!hasCompleteRgba(image)) {
+      throw std::invalid_argument("glyph bitmap has insufficient RGBA data");
     }
     if (image.width + context.padding * 2 > context.pageWidth ||
         image.height + context.padding * 2 > context.pageHeight) {
@@ -2712,9 +2721,7 @@ private:
       }
       const BitmapImage &image =
           pending != nullptr ? pending->bitmap.image : glyph.glyph.image;
-      if (image.width <= 0 || image.height <= 0 ||
-          image.rgba.size() < static_cast<std::size_t>(image.width) *
-                                  static_cast<std::size_t>(image.height) * 4U) {
+      if (!hasCompleteRgba(image)) {
         continue;
       }
       if (image.width + m_context.padding * 2 > m_context.pageWidth ||

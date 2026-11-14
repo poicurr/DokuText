@@ -2,7 +2,9 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "TestUtils.hpp"
@@ -610,6 +612,42 @@ void test_lightweight_preparation() {
         "direct cache eviction did not invalidate the prepared result");
 }
 
+void test_build_atlas_requires_glyph_pixels() {
+  TextSystem system;
+  TextAtlas atlas(makeAtlasOptions(registerDefaultChain(system)));
+  const auto prepared = system.prepareLine(atlas, "A");
+  check(prepared.layout.glyphs.size() == 1, "expected one prepared glyph");
+  const auto &image = prepared.layout.glyphs.front().glyph.image;
+  check(image.width > 0 && image.height > 0 && image.rgba.empty(),
+        "expected a prepared glyph with dimensions and no pixels");
+
+  DokuTextContext context;
+  DokuText renderer(context);
+  const auto expectRejection = [&](const TextLineLayout &layout) {
+    try {
+      (void)renderer.buildAtlas(layout, {});
+    } catch (const std::invalid_argument &error) {
+      check(std::string_view(error.what()).find("RGBA") !=
+                std::string_view::npos,
+            "buildAtlas should identify the missing RGBA data");
+      return;
+    }
+    fail("buildAtlas should reject insufficient glyph pixels");
+  };
+  expectRejection(prepared.layout);
+
+  TextLayoutContext layoutContext;
+  layoutContext.fallbackChain.textFonts = {TEXT_FONT};
+  layoutContext.pixelSize = atlas.options().pixelSize;
+  auto owning = renderer.layoutLine(layoutContext, "A");
+  const auto rebuilt = renderer.buildAtlas(owning, {});
+  check(rebuilt.entries.size() == 1 && rebuilt.diagnostics.empty(),
+        "buildAtlas should accept a rasterized glyph");
+
+  owning.glyphs.front().glyph.image.rgba.pop_back();
+  expectRejection(owning);
+}
+
 void test_composed_cluster_identity() {
   TextSystem system;
   FontFallbackChain chain;
@@ -679,6 +717,7 @@ int main() {
   test_emoji_false_string_view();
   test_emoji_false_text_request();
   test_lightweight_preparation();
+  test_build_atlas_requires_glyph_pixels();
   test_composed_cluster_identity();
   test_wrapped_diagnostic_distribution();
 

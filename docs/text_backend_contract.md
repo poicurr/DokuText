@@ -230,7 +230,9 @@ fields. This changes the binary layout of `PreparedTextLine` and
   image dimensions. Upload plans from these calls list the pages touched by
   the update.
 - For standalone glyph images, use the low-level `DokuText::layoutLine` or
-  `DokuText::layoutText`. The low-level `buildDrawText(layout, cache)`
+  `DokuText::layoutText`. Pass a rasterized line layout to `DokuText::buildAtlas`.
+  It throws `std::invalid_argument` if a glyph with positive image dimensions
+  has insufficient RGBA data. The low-level `buildDrawText(layout, cache)`
   overload provides an owning atlas snapshot.
 - Atlas handles identify rendered cluster images. Simple single-glyph
   clusters keep their existing handle. Composed clusters include the shaped

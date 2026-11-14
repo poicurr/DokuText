@@ -124,6 +124,8 @@ public:
 
   TextLineLayout layoutLine(const TextRasterResult &raster) const;
 
+  // Throws std::invalid_argument if a glyph with positive image dimensions
+  // has insufficient RGBA data. Use a rasterized layout for this overload.
   AtlasBuildResult buildAtlas(const TextLineLayout &layout,
                               const AtlasBuildContext &context) const;
 
