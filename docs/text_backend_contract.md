@@ -208,7 +208,35 @@ Unsupported or future scope:
 
 `TextSystem::prepareLine(...)`, `TextSystem::prepareText(...)`, and `TextSystem::seedAtlas(...)` may synchronously ensure required glyphs in the atlas and return upload plans.
 
-This is a DokuText-side synchronous atlas update path.
+This is a DokuText-side synchronous atlas update path. Atlas-backed text
+preparation resolves shaped clusters against the atlas before rendering.
+Registered glyphs reuse the stored image dimensions and bearings. Read-only
+preparation and baked-atlas layout report atlas misses and retain advance and
+caret geometry for those clusters.
+
+### Prepared results and compatibility
+
+Rebuild C++ clients when upgrading to the prepared result types with revision
+fields. This changes the binary layout of `PreparedTextLine` and
+`PreparedTextParagraph`.
+
+- High-level layout and draw glyphs carry dimensions, bearings and advances.
+  Their `glyph.image.rgba` arrays are empty in both the line and paragraph
+  views. Draw glyphs carry a page handle, atlas rectangle, UVs and render
+  attributes for each resolved atlas entry.
+- `PreparedTextParagraph::drawRun.atlases` is empty. Read texture pixels from
+  the source `TextAtlas::pages()` or `BakedTextAtlas::pages()`. New-page
+  records from high-level preparation and seeding carry page handles and
+  image dimensions. Upload plans from these calls list the pages touched by
+  the update.
+- For standalone glyph images, use the low-level `DokuText::layoutLine` or
+  `DokuText::layoutText`. The low-level `buildDrawText(layout, cache)`
+  overload provides an owning atlas snapshot.
+- Atlas handles identify rendered cluster images. Simple single-glyph
+  clusters keep their existing handle. Composed clusters include the shaped
+  glyph sequence and offsets in the handle so distinct images can coexist.
+  `probeText` reports one atlas lookup per shaped cluster. Rebuild any
+  persisted tables keyed by the old composed-cluster handles.
 
 ### Runtime budgeted integration guidance
 
@@ -230,9 +258,15 @@ For runtime UI, it is recommended to call with `allowGlyphAppend = false` by def
 
 `TextAtlasAppendPlan`:
 
-- `candidates`: `MissingAtlasGlyph` candidates identified as missing during layout
+- `candidates`: unique missing cluster images identified during shaping
 - `estimatedGlyphCount`, `estimatedColorGlyphCount`, `estimatedUploadBytes`
 - `budgetExceeded`
+
+The count limits are evaluated before rasterization. When either count limit
+rejects a plan, `estimatedUploadBytes` is zero because byte sizing was skipped.
+Otherwise byte sizing renders the unique missing candidates to measure their
+RGBA payload sizes. New pages and padding are accounted for by the upload
+plan produced on append.
 
 ## 11. Revision Model
 
@@ -245,13 +279,21 @@ For runtime UI, it is recommended to call with `allowGlyphAppend = false` by def
 - `glyphSetRevision()`: represents logical changes to the glyph set.
 - `atlasTextureRevision()`: represents updates to atlas image contents.
 
-`glyphSetRevision` tracks changes via `evictedHandles` / `updatedEntries` and acts as an invalidation trigger for prepared text caches and similar structures.
+The cache owns both dynamic counters. Successful insertions and evictions
+advance both counters. Compaction of a nonempty atlas advances the texture
+revision. Cache replacement advances both counters. These rules also apply
+to mutations through `TextAtlas::cache()`. For a direct cache update, consume
+the returned update and build its renderer upload plan using
+`buildAtlasPageUploadPlan`.
 
-`atlasTextureRevision` tracks the appearance of `newPages` / `dirtyRects` and acts as a trigger for re-uploading to the renderer.
-
-### Planned DokuEngine integration revisions
-
-Engine-side adapters should use the above revision concepts to separate `UiTextCache` invalidation boundaries from renderer texture synchronization.
+Each prepared result records the dynamic `glyphSetRevision` and
+`atlasTextureRevision`, or the immutable `bakedAtlasRevision`, after
+preparation. Pair page handles with the source atlas. Invalidate prepared
+geometry when either recorded dynamic revision differs from the current
+revision. In particular, rebuild the draw run after compaction or eviction
+before using its UVs. Synchronize the texture to the current texture
+revision before drawing. For baked results, match the source baked atlas and
+its revision.
 
 Missing glyph states must not be permanently cached because fallback chains, font reloads, atlas updates, or dynamic append may later resolve them.
 

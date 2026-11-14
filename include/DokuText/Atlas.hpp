@@ -197,6 +197,7 @@ struct TextAtlasBakeRequest {
 struct TextAtlasSeedResult {
   TextSeedRequest seedRequest;
   std::vector<std::uint32_t> codePoints;
+  // New-page records carry handles and dimensions. Read pixels from the atlas.
   GlyphAtlasCacheUpdate atlasUpdate;
   std::vector<AtlasPageUploadPlan> atlasUploadPlan;
   TextCompatibilityReport compatibility;
@@ -334,6 +335,8 @@ struct TextAtlasAppendPlan {
   std::vector<MissingAtlasGlyph> candidates;
   std::size_t estimatedGlyphCount = 0;
   std::size_t estimatedColorGlyphCount = 0;
+  // Sum of candidate RGBA payload sizes. Zero if sizing was skipped because
+  // one of the glyph-count budgets was already exceeded.
   std::size_t estimatedUploadBytes = 0;
   bool budgetExceeded = false;
 };

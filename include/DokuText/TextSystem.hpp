@@ -74,6 +74,9 @@ struct TextProbeResult {
   std::vector<Diagnostic> diagnostics;
 };
 
+// Prepared results carry placement and atlas references. Glyph RGBA arrays
+// are empty, and new-page updates carry handles and image dimensions.
+// Read texture pixels from the source atlas.
 struct PreparedTextLine {
   TextLineLayout layout;
   TextDrawRun drawRun;
@@ -84,8 +87,13 @@ struct PreparedTextLine {
   std::vector<AtlasPageUploadPlan> atlasUploadPlan;
   std::vector<std::string> missingGlyphs;
   std::vector<Diagnostic> diagnostics;
+  // The revisions of the source atlas at preparation time.
+  std::uint64_t glyphSetRevision = 0;
+  std::uint64_t atlasTextureRevision = 0;
+  std::uint64_t bakedAtlasRevision = 0;
 };
 
+// The same atlas reference contract applies here. drawRun.atlases is empty.
 struct PreparedTextParagraph {
   MultiLineLayout layout;
   MultiLineDrawRun drawRun;
@@ -95,6 +103,10 @@ struct PreparedTextParagraph {
   std::vector<AtlasPageUploadPlan> atlasUploadPlan;
   std::vector<std::string> missingGlyphs;
   std::vector<Diagnostic> diagnostics;
+  // The revisions of the source atlas at preparation time.
+  std::uint64_t glyphSetRevision = 0;
+  std::uint64_t atlasTextureRevision = 0;
+  std::uint64_t bakedAtlasRevision = 0;
 };
 
 class TextSystem {

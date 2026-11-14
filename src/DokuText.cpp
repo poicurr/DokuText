@@ -115,18 +115,20 @@ struct ClusterRenderResult {
 };
 
 struct GlyphCacheKey {
+  const FontContext *m_font = nullptr;
   hb_codepoint_t m_glyphId = 0;
   unsigned int m_paletteIndex = 0;
 
   bool operator==(const GlyphCacheKey &other) const {
-    return m_glyphId == other.m_glyphId &&
+    return m_font == other.m_font && m_glyphId == other.m_glyphId &&
            m_paletteIndex == other.m_paletteIndex;
   }
 };
 
 struct GlyphCacheKeyHasher {
   std::size_t operator()(const GlyphCacheKey &key) const {
-    return (static_cast<std::size_t>(key.m_glyphId) << 1U) ^
+    return std::hash<const FontContext *>{}(key.m_font) ^
+           (static_cast<std::size_t>(key.m_glyphId) << 1U) ^
            static_cast<std::size_t>(key.m_paletteIndex);
   }
 };
@@ -746,7 +748,7 @@ renderGlyphCluster(FontContext &font, const TextCluster &cluster,
   ClusterRenderResult result;
 
   struct PositionedGlyph {
-    GlyphSurface m_surface;
+    const GlyphSurface *m_surface = nullptr;
     int m_left = 0;
     int m_top = 0;
   };
@@ -763,7 +765,7 @@ renderGlyphCluster(FontContext &font, const TextCluster &cluster,
   int maxY = 0;
 
   for (const ShapedGlyph &glyph : shapedGlyphs) {
-    const GlyphCacheKey cacheKey{glyph.m_glyphId, paletteIndex};
+    const GlyphCacheKey cacheKey{&font, glyph.m_glyphId, paletteIndex};
     auto cacheIt = glyphCache.find(cacheKey);
     if (cacheIt == glyphCache.end()) {
       ++cacheStats.m_glyphMisses;
@@ -792,14 +794,14 @@ renderGlyphCluster(FontContext &font, const TextCluster &cluster,
         penX + glyph.m_xOffset + cacheIt->second.m_surface.m_bearingX;
     positioned.m_top =
         penY + glyph.m_yOffset + cacheIt->second.m_surface.m_bearingY;
-    positioned.m_surface = cacheIt->second.m_surface;
+    positioned.m_surface = &cacheIt->second.m_surface;
 
-    if (positioned.m_surface.m_image.width() > 0 &&
-        positioned.m_surface.m_image.height() > 0) {
+    if (positioned.m_surface->m_image.width() > 0 &&
+        positioned.m_surface->m_image.height() > 0) {
       const int left = positioned.m_left;
-      const int right = left + positioned.m_surface.m_image.width();
+      const int right = left + positioned.m_surface->m_image.width();
       const int top = positioned.m_top;
-      const int bottom = top - positioned.m_surface.m_image.height();
+      const int bottom = top - positioned.m_surface->m_image.height();
       if (!hasBounds) {
         minX = left;
         maxX = right;
@@ -833,13 +835,13 @@ renderGlyphCluster(FontContext &font, const TextCluster &cluster,
   clusterSurface.m_image.resize(maxX - minX, maxY - minY);
   clusterSurface.m_image.clear(0U, 0U, 0U, 0U);
   for (const PositionedGlyph &glyph : positionedGlyphs) {
-    if (glyph.m_surface.m_image.width() <= 0 ||
-        glyph.m_surface.m_image.height() <= 0) {
+    if (glyph.m_surface->m_image.width() <= 0 ||
+        glyph.m_surface->m_image.height() <= 0) {
       continue;
     }
     const int offsetX = glyph.m_left - minX;
     const int offsetY = maxY - glyph.m_top;
-    clusterSurface.m_image.blit(glyph.m_surface.m_image, offsetX, offsetY);
+    clusterSurface.m_image.blit(glyph.m_surface->m_image, offsetX, offsetY);
   }
 
   return result;
@@ -882,20 +884,16 @@ renderGlyphCluster(FontContext &font, const TextCluster &cluster,
   return stream.str();
 }
 
-[[nodiscard]] bool verifyClusterMetrics(const ClusterRenderResult &result,
-                                        const TextCluster &cluster) {
-  int expectedAdvance = 0;
-  int expectedYAdvance = 0;
-  for (const ShapedGlyph &glyph : result.m_shapedGlyphs) {
-    expectedAdvance += glyph.m_xAdvance;
-    expectedYAdvance += glyph.m_yAdvance;
-  }
+[[nodiscard]] bool
+verifyClusterMetrics(int actualAdvance, int expectedAdvance,
+                     int expectedYAdvance,
+                     const std::vector<std::uint32_t> &codePoints) {
   bool ok = true;
-  if (result.m_surface.m_advance != expectedAdvance) {
+  if (actualAdvance != expectedAdvance) {
     std::cerr << "cluster advance mismatch"
-              << " expected=" << expectedAdvance
-              << " actual=" << result.m_surface.m_advance << " cluster=";
-    for (std::uint32_t codePoint : cluster.m_codePoints) {
+              << " expected=" << expectedAdvance << " actual=" << actualAdvance
+              << " cluster=";
+    for (std::uint32_t codePoint : codePoints) {
       std::cerr << " U+" << std::uppercase << std::hex << codePoint;
     }
     std::cerr << std::dec << '\n';
@@ -906,6 +904,18 @@ renderGlyphCluster(FontContext &font, const TextCluster &cluster,
               << " expectedYAdvance=" << expectedYAdvance << '\n';
   }
   return ok;
+}
+
+[[nodiscard]] bool verifyClusterMetrics(const ClusterRenderResult &result,
+                                        const TextCluster &cluster) {
+  int expectedAdvance = 0;
+  int expectedYAdvance = 0;
+  for (const ShapedGlyph &glyph : result.m_shapedGlyphs) {
+    expectedAdvance += glyph.m_xAdvance;
+    expectedYAdvance += glyph.m_yAdvance;
+  }
+  return verifyClusterMetrics(result.m_surface.m_advance, expectedAdvance,
+                              expectedYAdvance, cluster.m_codePoints);
 }
 
 void printColrV1ScanSummary(hb_codepoint_t glyphId,
@@ -1052,14 +1062,13 @@ namespace doku::text {
 
 namespace {
 
-struct TempRenderedCluster {
-  ClusterRenderResult renderResult;
-  TextCluster cluster;
-  FontContext *font = nullptr;
-  std::size_t clusterIndex = 0;
-  int penX = 0;
-  bool isColorGlyph = false;
-  bool fallbackApplied = false;
+// The atlas stores a single composited bitmap for each shaped cluster.
+struct GlyphImageMetrics {
+  int width = 0;
+  int height = 0;
+  int bearingX = 0;
+  int bearingY = 0;
+  bool usesColor = false;
 };
 
 struct ResolvedShapedCluster {
@@ -1068,7 +1077,7 @@ struct ResolvedShapedCluster {
   FontContext *font = nullptr;
   FontRole requestedRole = FontRole::Text;
   std::vector<std::string> attemptedFonts;
-  int penX = 0;
+  std::size_t sourceClusterIndex = 0;
   bool fallbackApplied = false;
   bool isColorGlyph = false;
 };
@@ -1078,7 +1087,7 @@ struct ResolvedShapedCluster {
 }
 
 [[nodiscard]] LineMetrics
-buildLineMetrics(const std::vector<TempRenderedCluster> &clusters,
+buildLineMetrics(const std::vector<RasterizedGlyph> &glyphs,
                  const std::vector<const FontContext *> &usedFonts,
                  unsigned int pixelSize, int lineWidth) {
   LineMetrics metrics;
@@ -1097,15 +1106,15 @@ buildLineMetrics(const std::vector<TempRenderedCluster> &clusters,
   metrics.lineWidth = lineWidth;
 
   bool hasBounds = false;
-  for (const TempRenderedCluster &cluster : clusters) {
-    const GlyphSurface &surface = cluster.renderResult.m_surface;
-    if (surface.m_image.width() <= 0 || surface.m_image.height() <= 0) {
+  for (const RasterizedGlyph &positioned : glyphs) {
+    const GlyphBitmap &glyph = positioned.glyph;
+    if (glyph.image.width <= 0 || glyph.image.height <= 0) {
       continue;
     }
-    const int minX = cluster.penX + surface.m_bearingX;
-    const int maxX = minX + surface.m_image.width();
-    const int maxY = surface.m_bearingY;
-    const int minY = maxY - surface.m_image.height();
+    const int minX = positioned.penX + glyph.bearingX;
+    const int maxX = minX + glyph.image.width;
+    const int maxY = glyph.bearingY;
+    const int minY = maxY - glyph.image.height;
     if (!hasBounds) {
       metrics.boundingBox = {minX, minY, maxX, maxY};
       hasBounds = true;
@@ -1145,14 +1154,6 @@ clusterUsesColorRendering(FontContext &font,
     advance += glyph.m_xAdvance;
   }
   return advance;
-}
-
-[[nodiscard]] BitmapImage toBitmapImage(const Bitmap &bitmap) {
-  BitmapImage image;
-  image.width = bitmap.width();
-  image.height = bitmap.height();
-  image.rgba = bitmap.rgba();
-  return image;
 }
 
 [[nodiscard]] std::uint64_t fnv1aAppend(std::uint64_t hash,
@@ -1210,17 +1211,54 @@ makeGlyphHandle(std::string_view fontPath, std::uint32_t glyphId,
   return isColorGlyph ? BlendHint::PremultipliedAlpha : BlendHint::Coverage;
 }
 
-[[nodiscard]] GlyphBitmap toGlyphBitmap(const GlyphSurface &surface,
-                                        const TextCluster &cluster,
-                                        const FontContext &font) {
-  GlyphBitmap glyph;
-  glyph.image = toBitmapImage(surface.m_image);
-  glyph.bearingX = surface.m_bearingX;
-  glyph.bearingY = surface.m_bearingY;
-  glyph.advance = surface.m_advance;
-  glyph.codePoints = cluster.m_codePoints;
-  glyph.fontPath = font.m_path;
-  return glyph;
+[[nodiscard]] GlyphHandle clusterGlyphHandle(const ShapedCluster &cluster,
+                                             const TextLayoutContext &context) {
+  if (cluster.glyphs.empty()) {
+    return {};
+  }
+  const ShapedGlyphInfo &first = cluster.glyphs.front();
+  const GlyphHandle firstHandle =
+      makeGlyphHandle(cluster.fontPath, first.glyphId, context.pixelSize,
+                      context.paletteIndex, 0U, 0U, first.isColorGlyph);
+  if (cluster.glyphs.size() == 1 && first.xOffset == 0 && first.yOffset == 0) {
+    return firstHandle;
+  }
+
+  // A composition can share its first glyph with a different cluster.
+  std::uint64_t hash = fnv1aAppend(firstHandle.value, "cluster");
+  for (const ShapedGlyphInfo &glyph : cluster.glyphs) {
+    hash = fnv1aAppend(hash, static_cast<std::uint64_t>(glyph.glyphId));
+    hash = fnv1aAppend(hash, static_cast<std::uint64_t>(glyph.xAdvance));
+    hash = fnv1aAppend(hash, static_cast<std::uint64_t>(glyph.yAdvance));
+    hash = fnv1aAppend(hash, static_cast<std::uint64_t>(glyph.xOffset));
+    hash = fnv1aAppend(hash, static_cast<std::uint64_t>(glyph.yOffset));
+  }
+  return {hash};
+}
+
+[[nodiscard]] bool bitmapUsesColorRendering(const BitmapImage &image) {
+  for (std::size_t offset = 0; offset + 3U < image.rgba.size(); offset += 4U) {
+    const std::uint8_t r = image.rgba[offset];
+    const std::uint8_t g = image.rgba[offset + 1U];
+    const std::uint8_t b = image.rgba[offset + 2U];
+    if (r != g || g != b) {
+      return true;
+    }
+  }
+  return false;
+}
+
+[[nodiscard]] GlyphImageMetrics glyphImageMetrics(const GlyphBitmap &glyph,
+                                                  bool usesColor) {
+  return {glyph.image.width, glyph.image.height, glyph.bearingX, glyph.bearingY,
+          usesColor};
+}
+
+void setImageMetrics(GlyphBitmap &glyph, const GlyphImageMetrics &metrics) {
+  glyph.image.width = metrics.width;
+  glyph.image.height = metrics.height;
+  glyph.bearingX = metrics.bearingX;
+  glyph.bearingY = metrics.bearingY;
 }
 
 [[nodiscard]] FloatRect toNormalizedUvRect(const Rect &pixelRect, int pageWidth,
@@ -1279,19 +1317,8 @@ void blitBitmapImage(BitmapImage &dst, const BitmapImage &src, int offsetX,
 #endif
 }
 
-[[nodiscard]] FontFallbackChain
-makeEffectiveFallbackChain(const FontFallbackChain &chain) {
-  FontFallbackChain effective;
-  for (const std::string &path : chain.textFonts) {
-    effective.textFonts.push_back(resolveExistingPath({path}));
-  }
-  for (const std::string &path : chain.emojiFonts) {
-    effective.emojiFonts.push_back(resolveExistingPath({path}));
-  }
-  for (const std::string &path : chain.symbolFonts) {
-    effective.symbolFonts.push_back(resolveExistingPath({path}));
-  }
-  return effective;
+[[nodiscard]] auto fontPaths(const FontFallbackChain &chain) {
+  return std::array{&chain.textFonts, &chain.emojiFonts, &chain.symbolFonts};
 }
 
 [[nodiscard]] DiagnosticsSummary
@@ -1397,91 +1424,70 @@ joinClusterText(const std::vector<ShapedCluster> &clusters) {
   return text;
 }
 
-[[nodiscard]] TextShapeResult sliceShapeResult(const TextShapeResult &source,
-                                               std::size_t beginCluster,
-                                               std::size_t endCluster) {
-  TextShapeResult result;
-  if (beginCluster >= endCluster || endCluster > source.clusters.size()) {
-    result.text.clear();
-    result.metrics = source.metrics;
-    result.metrics.lineWidth = 0;
-    result.diagnosticsSummary =
-        buildDiagnosticsSummary(result.diagnostics, result.summary);
-    return result;
-  }
-
-  result.metrics = source.metrics;
-  result.clusters.reserve(endCluster - beginCluster);
-  for (std::size_t clusterIndex = beginCluster; clusterIndex < endCluster;
-       ++clusterIndex) {
-    ShapedCluster cluster = source.clusters[clusterIndex];
-    for (std::size_t glyphIndex = 0; glyphIndex < cluster.glyphs.size();
-         ++glyphIndex) {
-      cluster.glyphs[glyphIndex].clusterIndex = clusterIndex - beginCluster;
-      cluster.glyphs[glyphIndex].glyphIndexInCluster = glyphIndex;
-    }
-    result.metrics.lineWidth += computeClusterAdvance(cluster);
-    result.clusters.push_back(std::move(cluster));
-  }
-  result.text = joinClusterText(result.clusters);
-
-  for (const FallbackTraceEntry &trace : source.fallbackTrace) {
-    if (trace.clusterIndex < beginCluster || trace.clusterIndex >= endCluster) {
-      continue;
-    }
-    FallbackTraceEntry adjusted = trace;
-    adjusted.clusterIndex -= beginCluster;
-    result.fallbackTrace.push_back(std::move(adjusted));
-  }
-
-  for (const Diagnostic &diagnostic : source.diagnostics) {
-    if (diagnostic.code == DiagnosticCode::LineOverflow &&
-        diagnostic.clusterText == joinClusterText(result.clusters)) {
-      result.diagnostics.push_back(diagnostic);
-      continue;
-    }
-    if (diagnostic.clusterIndex < beginCluster ||
-        diagnostic.clusterIndex >= endCluster) {
-      continue;
-    }
-    Diagnostic adjusted = diagnostic;
-    adjusted.clusterIndex -= beginCluster;
-    result.diagnostics.push_back(std::move(adjusted));
-  }
-
-  result.summary = summarizeShape(result);
-  result.diagnosticsSummary =
-      buildDiagnosticsSummary(result.diagnostics, result.summary);
-  return result;
-}
-
 [[nodiscard]] std::vector<TextShapeResult>
-wrapShapeResult(const TextShapeResult &lineShape, int wrappingWidth) {
+wrapShapeResult(TextShapeResult lineShape, int wrappingWidth,
+                const std::vector<std::size_t> &sourceClusterIndices) {
+  std::vector<TextShapeResult> wrapped;
   if (wrappingWidth <= 0 || lineShape.clusters.empty()) {
-    return {lineShape};
+    wrapped.push_back(std::move(lineShape));
+    return wrapped;
   }
 
-  std::vector<TextShapeResult> wrapped;
   std::size_t lineBegin = 0;
+  std::size_t diagnosticIndex = 0;
+  std::size_t sourceLineBegin = 0;
   int currentWidth = 0;
+  const auto appendLine = [&](std::size_t endCluster) {
+    TextShapeResult line;
+    line.metrics = lineShape.metrics;
+    line.metrics.lineWidth += currentWidth;
+    line.clusters.reserve(endCluster - lineBegin);
+    line.fallbackTrace.reserve(endCluster - lineBegin);
+    for (std::size_t index = lineBegin; index < endCluster; ++index) {
+      ShapedCluster &cluster = lineShape.clusters[index];
+      for (ShapedGlyphInfo &glyph : cluster.glyphs) {
+        glyph.clusterIndex -= lineBegin;
+      }
+      line.text += cluster.text;
+      line.clusters.push_back(std::move(cluster));
+
+      FallbackTraceEntry &trace = lineShape.fallbackTrace[index];
+      trace.clusterIndex -= lineBegin;
+      line.fallbackTrace.push_back(std::move(trace));
+    }
+
+    const std::size_t sourceLineEnd =
+        endCluster < sourceClusterIndices.size()
+            ? sourceClusterIndices[endCluster]
+            : std::numeric_limits<std::size_t>::max();
+    while (diagnosticIndex < lineShape.diagnostics.size() &&
+           lineShape.diagnostics[diagnosticIndex].clusterIndex <
+               sourceLineEnd) {
+      Diagnostic &diagnostic = lineShape.diagnostics[diagnosticIndex++];
+      diagnostic.clusterIndex -= sourceLineBegin;
+      line.diagnostics.push_back(std::move(diagnostic));
+    }
+    sourceLineBegin = sourceLineEnd;
+
+    line.summary = summarizeShape(line);
+    line.diagnosticsSummary =
+        buildDiagnosticsSummary(line.diagnostics, line.summary);
+    wrapped.push_back(std::move(line));
+  };
+
   for (std::size_t clusterIndex = 0; clusterIndex < lineShape.clusters.size();
        ++clusterIndex) {
     const int clusterWidth =
         computeClusterAdvance(lineShape.clusters[clusterIndex]);
-    const bool shouldWrap =
-        clusterIndex > lineBegin && currentWidth + clusterWidth > wrappingWidth;
-    if (shouldWrap) {
-      wrapped.push_back(sliceShapeResult(lineShape, lineBegin, clusterIndex));
+    if (clusterIndex > lineBegin &&
+        currentWidth + clusterWidth > wrappingWidth) {
+      appendLine(clusterIndex);
       lineBegin = clusterIndex;
       currentWidth = 0;
     }
     currentWidth += clusterWidth;
   }
-
-  if (lineBegin < lineShape.clusters.size()) {
-    wrapped.push_back(
-        sliceShapeResult(lineShape, lineBegin, lineShape.clusters.size()));
-  }
+  appendLine(lineShape.clusters.size());
   return wrapped;
 }
 
@@ -1725,20 +1731,29 @@ public:
   }
 
   FontContext &getFont(const std::string &path, unsigned int pixelSize) {
-    const std::string key = path + "#" + std::to_string(pixelSize);
-    auto it = m_fontCache.find(key);
-    if (it == m_fontCache.end()) {
-      auto font = std::make_unique<FontContext>(
-          makeFontContext(m_library.get(), path, pixelSize));
-      it = m_fontCache.emplace(key, std::move(font)).first;
+    auto &sizes = fontSizes(path);
+    auto it = sizes.find(pixelSize);
+    if (it == sizes.end()) {
+      it = sizes
+               .emplace(pixelSize,
+                        makeFontContext(m_library.get(), path, pixelSize))
+               .first;
     }
-    return *it->second;
+    return it->second;
+  }
+
+  void validateFontPaths(const FontFallbackChain &chain) {
+    for (const auto *paths : fontPaths(chain)) {
+      for (const std::string &path : *paths) {
+        (void)fontSizes(path);
+      }
+    }
   }
 
   FontChainId registerFontFallbackChain(const FontFallbackChain &chain) {
-    const FontFallbackChain effective = makeEffectiveFallbackChain(chain);
+    validateFontPaths(chain);
     const FontChainId id{m_nextFontChainId++};
-    m_fontChains.emplace(id.value, effective);
+    m_fontChains.emplace(id.value, chain);
     return id;
   }
 
@@ -1754,8 +1769,18 @@ public:
   }
 
 private:
+  using FontSizes = std::unordered_map<unsigned int, FontContext>;
+
+  FontSizes &fontSizes(const std::string &path) {
+    auto it = m_fontCache.find(path);
+    if (it == m_fontCache.end()) {
+      it = m_fontCache.try_emplace(resolveExistingPath({path})).first;
+    }
+    return it->second;
+  }
+
   FreeTypeLibraryHandle m_library;
-  std::unordered_map<std::string, std::unique_ptr<FontContext>> m_fontCache;
+  std::unordered_map<std::string, FontSizes> m_fontCache;
   std::unordered_map<std::uint32_t, FontFallbackChain> m_fontChains;
   std::uint32_t m_nextFontChainId = 1;
 };
@@ -1764,8 +1789,9 @@ class DokuText::Impl {
 public:
   explicit Impl(DokuTextContext::Impl &context) : m_context(context) {}
 
-  TextShapeResult shapeLine(const TextLayoutContext &layoutContext,
-                            std::string_view text) const {
+  TextShapeResult
+  shapeLine(const TextLayoutContext &layoutContext, std::string_view text,
+            std::vector<std::size_t> *sourceClusterIndices = nullptr) const {
     if (text.empty()) {
       throw std::invalid_argument("text is empty");
     }
@@ -1777,6 +1803,9 @@ public:
     for (std::size_t clusterIndex = 0; clusterIndex < shapedClusters.size();
          ++clusterIndex) {
       const ResolvedShapedCluster &cluster = shapedClusters[clusterIndex];
+      if (sourceClusterIndices != nullptr) {
+        sourceClusterIndices->push_back(cluster.sourceClusterIndex);
+      }
       ShapedCluster shapedCluster;
       shapedCluster.text = encodeUtf8(cluster.cluster.m_codePoints);
       shapedCluster.beginByteOffset = cluster.cluster.m_beginByteOffset;
@@ -1814,23 +1843,27 @@ public:
     result.lineSummaries.reserve(inputLines.size());
 
     for (const std::string &inputLine : inputLines) {
-      const TextShapeResult physicalLine =
-          inputLine.empty() ? makeEmptyLineShape(layoutContext)
-                            : shapeLine(layoutContext, inputLine);
-      const std::vector<TextShapeResult> wrappedLines =
+      const int wrappingWidth = layoutContext.paragraphOptions.wrappingWidth;
+      std::vector<std::size_t> sourceClusterIndices;
+      TextShapeResult physicalLine =
           inputLine.empty()
-              ? std::vector<TextShapeResult>{physicalLine}
-              : wrapShapeResult(physicalLine,
-                                layoutContext.paragraphOptions.wrappingWidth);
-      for (TextShapeResult wrappedLine : wrappedLines) {
+              ? makeEmptyLineShape(layoutContext)
+              : shapeLine(layoutContext, inputLine,
+                          wrappingWidth > 0 ? &sourceClusterIndices : nullptr);
+      auto wrappedLines = wrapShapeResult(std::move(physicalLine),
+                                          wrappingWidth, sourceClusterIndices);
+      for (TextShapeResult &wrappedLine : wrappedLines) {
         const std::size_t lineIndex = result.lines.size();
-        const std::string lineText = joinClusterText(wrappedLine.clusters);
+        std::string lineText =
+            wrappingWidth > 0 && !wrappedLine.clusters.empty()
+                ? wrappedLine.text
+                : joinClusterText(wrappedLine.clusters);
         appendLineOverflowDiagnostic(
             result.diagnostics, lineText, lineIndex,
             wrappedLine.metrics.lineWidth,
             layoutContext.paragraphOptions.wrappingWidth);
         assignLineIndex(wrappedLine.diagnostics, lineIndex);
-        result.lineTexts.push_back(lineText);
+        result.lineTexts.push_back(std::move(lineText));
         result.lineSummaries.push_back(wrappedLine.summary);
         mergeLineSummary(result.summary, wrappedLine.summary);
         result.diagnostics.insert(result.diagnostics.end(),
@@ -1849,125 +1882,153 @@ public:
     return result;
   }
 
-  TextRasterResult rasterizeLine(const TextLayoutContext &layoutContext,
-                                 const TextShapeResult &shape) const {
+  struct RasterSession {
     GlyphRenderCache glyphCache;
     CacheStats cacheStats;
-    ColrV1RenderOptions options;
-    std::vector<TempRenderedCluster> tempClusters;
-    std::vector<const FontContext *> usedFonts;
+  };
 
+  [[nodiscard]] GlyphBitmap
+  renderCluster(const TextLayoutContext &context, const ShapedCluster &cluster,
+                RasterSession &session, std::size_t clusterIndex,
+                std::vector<Diagnostic> &diagnostics) const {
+    FontContext &font = m_context.getFont(cluster.fontPath, context.pixelSize);
+    TextCluster textCluster;
+    textCluster.m_codePoints = cluster.codePoints;
+    std::vector<ShapedGlyph> shapedGlyphs;
+    shapedGlyphs.reserve(cluster.glyphs.size());
+    for (const ShapedGlyphInfo &glyph : cluster.glyphs) {
+      shapedGlyphs.push_back({glyph.glyphId, glyph.xAdvance, glyph.yAdvance,
+                              glyph.xOffset, glyph.yOffset});
+    }
+
+    ClusterRenderResult rendered;
+    try {
+      rendered = renderGlyphCluster(font, textCluster, shapedGlyphs,
+                                    context.paletteIndex, session.glyphCache,
+                                    session.cacheStats, ColrV1RenderOptions{});
+    } catch (const std::exception &exception) {
+      diagnostics.push_back(
+          {DiagnosticSeverity::Warning, DiagnosticCode::MissingGlyphCluster, 0,
+           clusterIndex,
+           std::string("glyph cluster could not be rasterized: ") +
+               exception.what(),
+           cluster.text, cluster.codePoints, cluster.fontPath});
+      return {};
+    }
+
+    GlyphSurface &surface = rendered.m_surface;
+    GlyphBitmap bitmap;
+    bitmap.image.width = surface.m_image.width();
+    bitmap.image.height = surface.m_image.height();
+    bitmap.image.rgba = std::move(surface.m_image.rgba());
+    bitmap.bearingX = surface.m_bearingX;
+    bitmap.bearingY = surface.m_bearingY;
+    bitmap.advance = surface.m_advance;
+    return bitmap;
+  }
+
+  template <typename FetchImage>
+  TextRasterResult rasterizeLine(const TextLayoutContext &context,
+                                 const TextShapeResult &shape,
+                                 FetchImage &fetchImage) const {
     TextRasterResult result;
     result.text = shape.text;
     result.diagnostics = shape.diagnostics;
     result.fallbackTrace = shape.fallbackTrace;
+    result.glyphs.reserve(shape.clusters.size());
+    result.clusters.reserve(shape.clusters.size());
+    std::vector<const FontContext *> usedFonts;
 
     int penX = 0;
     for (std::size_t clusterIndex = 0; clusterIndex < shape.clusters.size();
          ++clusterIndex) {
       const ShapedCluster &cluster = shape.clusters[clusterIndex];
-      FontContext &font = m_context.getFont(
-          resolveExistingPath({cluster.fontPath}), layoutContext.pixelSize);
-      TextCluster textCluster;
-      textCluster.m_codePoints = cluster.codePoints;
-
-      std::vector<ShapedGlyph> shapedGlyphs;
-      shapedGlyphs.reserve(cluster.glyphs.size());
-      for (const ShapedGlyphInfo &glyph : cluster.glyphs) {
-        shapedGlyphs.push_back({glyph.glyphId, glyph.xAdvance, glyph.yAdvance,
-                                glyph.xOffset, glyph.yOffset});
-      }
-      const int clusterAdvance = computeShapedAdvance(shapedGlyphs);
+      const int clusterAdvance = computeClusterAdvance(cluster);
       TextClusterLayout clusterLayout;
       clusterLayout.beginByteOffset = cluster.beginByteOffset;
       clusterLayout.endByteOffset = cluster.endByteOffset;
       clusterLayout.xMin = static_cast<float>(penX);
       clusterLayout.xMax = static_cast<float>(penX + clusterAdvance);
       clusterLayout.glyphBegin =
-          static_cast<std::uint32_t>(tempClusters.size());
-      clusterLayout.glyphEnd = clusterLayout.glyphBegin;
+          static_cast<std::uint32_t>(result.glyphs.size());
 
-      ClusterRenderResult clusterResult;
-      try {
-        clusterResult = renderGlyphCluster(font, textCluster, shapedGlyphs,
-                                           layoutContext.paletteIndex,
-                                           glyphCache, cacheStats, options);
-      } catch (const std::exception &exception) {
-        Diagnostic diagnostic;
-        diagnostic.severity = DiagnosticSeverity::Warning;
-        diagnostic.code = DiagnosticCode::MissingGlyphCluster;
-        diagnostic.clusterIndex = clusterIndex;
-        diagnostic.message =
-            std::string("glyph cluster could not be rasterized: ") +
-            exception.what();
-        diagnostic.clusterText = encodeUtf8(textCluster.m_codePoints);
-        diagnostic.codePoints = textCluster.m_codePoints;
-        diagnostic.fontPath = font.m_path;
-        result.diagnostics.push_back(std::move(diagnostic));
-        result.clusters.push_back(clusterLayout);
-        penX += clusterAdvance;
-        continue;
+      RasterizedGlyph glyph;
+      glyph.clusterIndex = clusterIndex;
+      glyph.penX = penX;
+      glyph.fallbackApplied = cluster.fallbackApplied;
+      if (!cluster.glyphs.empty()) {
+        glyph.glyphId = cluster.glyphs.front().glyphId;
+        glyph.isColorGlyph = cluster.glyphs.front().isColorGlyph;
+        glyph.handle = clusterGlyphHandle(cluster, context);
       }
-      if (layoutContext.verifyMetrics &&
-          !verifyClusterMetrics(clusterResult, textCluster)) {
-        Diagnostic diagnostic;
-        diagnostic.severity = DiagnosticSeverity::Warning;
-        diagnostic.code = DiagnosticCode::MetricsVerificationFailed;
-        diagnostic.message = "metrics verification failed";
-        diagnostic.clusterText = encodeUtf8(textCluster.m_codePoints);
-        diagnostic.codePoints = textCluster.m_codePoints;
-        diagnostic.fontPath = font.m_path;
-        result.diagnostics.push_back(std::move(diagnostic));
+      glyph.glyph.advance = clusterAdvance;
+      if (fetchImage(cluster, glyph, result.diagnostics)) {
+        if (context.verifyMetrics) {
+          int yAdvance = 0;
+          for (const ShapedGlyphInfo &shaped : cluster.glyphs) {
+            yAdvance += shaped.yAdvance;
+          }
+          if (!verifyClusterMetrics(glyph.glyph.advance, clusterAdvance,
+                                    yAdvance, cluster.codePoints)) {
+            result.diagnostics.push_back(
+                {DiagnosticSeverity::Warning,
+                 DiagnosticCode::MetricsVerificationFailed, 0, 0,
+                 "metrics verification failed", cluster.text,
+                 cluster.codePoints, cluster.fontPath});
+          }
+        }
+        glyph.glyph.advance = clusterAdvance;
+        glyph.glyph.codePoints = cluster.codePoints;
+        glyph.glyph.fontPath = cluster.fontPath;
+        if (usedFonts.empty() || usedFonts.back()->m_path != cluster.fontPath) {
+          usedFonts.push_back(
+              &m_context.getFont(cluster.fontPath, context.pixelSize));
+        }
+        result.glyphs.push_back(std::move(glyph));
       }
-
-      clusterLayout.glyphEnd = clusterLayout.glyphBegin + 1U;
+      clusterLayout.glyphEnd = static_cast<std::uint32_t>(result.glyphs.size());
       result.clusters.push_back(clusterLayout);
-      tempClusters.push_back(
-          {std::move(clusterResult), textCluster, &font, clusterIndex, penX,
-           cluster.glyphs.empty() ? false : cluster.glyphs.front().isColorGlyph,
-           cluster.fallbackApplied});
-      usedFonts.push_back(&font);
       penX += clusterAdvance;
     }
 
     result.metrics = buildLineMetrics(
-        tempClusters, usedFonts, layoutContext.pixelSize,
+        result.glyphs, usedFonts, context.pixelSize,
         shape.metrics.lineWidth > 0 ? shape.metrics.lineWidth : penX);
-
-    result.glyphs.reserve(tempClusters.size());
-    for (const TempRenderedCluster &cluster : tempClusters) {
-      RasterizedGlyph glyph;
-      glyph.handle =
-          cluster.renderResult.m_shapedGlyphs.empty()
-              ? GlyphHandle{}
-              : makeGlyphHandle(
-                    cluster.font->m_path,
-                    cluster.renderResult.m_shapedGlyphs.front().m_glyphId,
-                    layoutContext.pixelSize, layoutContext.paletteIndex,
-                    cluster.clusterIndex, 0U, cluster.isColorGlyph);
-      glyph.glyphId =
-          cluster.renderResult.m_shapedGlyphs.empty()
-              ? 0
-              : cluster.renderResult.m_shapedGlyphs.front().m_glyphId;
-      glyph.lineIndex = 0;
-      glyph.clusterIndex = cluster.clusterIndex;
-      glyph.glyphIndexInCluster = 0;
-      glyph.glyph = toGlyphBitmap(cluster.renderResult.m_surface,
-                                  cluster.cluster, *cluster.font);
-      glyph.penX = cluster.penX;
-      glyph.penY = 0;
-      glyph.isColorGlyph = cluster.isColorGlyph;
-      glyph.fallbackApplied = cluster.fallbackApplied;
-      result.glyphs.push_back(std::move(glyph));
-    }
     result.summary = summarizeRaster(result);
     result.diagnosticsSummary =
         buildDiagnosticsSummary(result.diagnostics, result.summary);
     return result;
   }
 
+  auto makeRasterFetcher(const TextLayoutContext &context,
+                         RasterSession &session) const {
+    return [&](const ShapedCluster &cluster, RasterizedGlyph &glyph,
+               std::vector<Diagnostic> &diagnostics) {
+      glyph.glyph = renderCluster(context, cluster, session, glyph.clusterIndex,
+                                  diagnostics);
+      return !glyph.glyph.image.rgba.empty();
+    };
+  }
+
+  TextRasterResult rasterizeLine(const TextLayoutContext &context,
+                                 const TextShapeResult &shape) const {
+    RasterSession session;
+    auto fetchImage = makeRasterFetcher(context, session);
+    return rasterizeLine(context, shape, fetchImage);
+  }
+
   MultiLineRasterResult rasterizeText(const TextLayoutContext &layoutContext,
                                       const MultiLineShapeResult &shape) const {
+    RasterSession session;
+    auto fetchImage = makeRasterFetcher(layoutContext, session);
+    return rasterizeText(layoutContext, shape, fetchImage, true);
+  }
+
+  template <typename FetchImage>
+  MultiLineRasterResult rasterizeText(const TextLayoutContext &layoutContext,
+                                      const MultiLineShapeResult &shape,
+                                      FetchImage &fetchImage,
+                                      bool flattenGlyphs) const {
     MultiLineRasterResult result;
     result.lineTexts = shape.lineTexts;
     result.lineSummaries = shape.lineSummaries;
@@ -1981,10 +2042,12 @@ public:
     for (std::size_t lineIndex = 0; lineIndex < shape.lines.size();
          ++lineIndex) {
       const TextShapeResult &lineShape = shape.lines[lineIndex];
-      TextRasterResult lineRaster =
-          lineShape.clusters.empty() && shape.lineTexts[lineIndex].empty()
-              ? makeEmptyLineRaster(layoutContext)
-              : rasterizeLine(layoutContext, lineShape);
+      TextRasterResult lineRaster;
+      if (lineShape.text.empty() && lineShape.clusters.empty()) {
+        lineRaster = makeEmptyLineRaster(layoutContext);
+      } else {
+        lineRaster = rasterizeLine(layoutContext, lineShape, fetchImage);
+      }
       assignLineIndex(lineRaster.diagnostics, lineIndex);
       result.lineOriginsY.push_back(currentOriginY);
       result.diagnostics.insert(result.diagnostics.end(),
@@ -2017,11 +2080,13 @@ public:
           computeLineAdvance(layoutContext, lineRaster.metrics);
       result.lineAdvance = std::max(result.lineAdvance, lineHeight);
 
-      for (const RasterizedGlyph &lineGlyph : lineRaster.glyphs) {
-        RasterizedGlyph glyph = lineGlyph;
-        glyph.lineIndex = lineIndex;
-        glyph.penY += currentOriginY;
-        result.glyphs.push_back(std::move(glyph));
+      if (flattenGlyphs) {
+        for (const RasterizedGlyph &lineGlyph : lineRaster.glyphs) {
+          RasterizedGlyph glyph = lineGlyph;
+          glyph.lineIndex = lineIndex;
+          glyph.penY += currentOriginY;
+          result.glyphs.push_back(std::move(glyph));
+        }
       }
 
       currentOriginY += lineHeight;
@@ -2080,7 +2145,17 @@ public:
   MultiLineLayout layoutText(const TextLayoutContext &layoutContext,
                              std::string_view text) const {
     const MultiLineShapeResult shape = shapeText(layoutContext, text);
-    const MultiLineRasterResult raster = rasterizeText(layoutContext, shape);
+    RasterSession session;
+    auto fetchImage = makeRasterFetcher(layoutContext, session);
+    return layoutText(layoutContext, shape, fetchImage);
+  }
+
+  template <typename FetchImage>
+  MultiLineLayout layoutText(const TextLayoutContext &layoutContext,
+                             const MultiLineShapeResult &shape,
+                             FetchImage &fetchImage) const {
+    const MultiLineRasterResult raster =
+        rasterizeText(layoutContext, shape, fetchImage, false);
     MultiLineLayout result;
     result.lineTexts = raster.lineTexts;
     result.lineOriginsY = raster.lineOriginsY;
@@ -2091,7 +2166,7 @@ public:
     result.boundingBox = raster.boundingBox;
     result.lineAdvance = raster.lineAdvance;
     result.lines.reserve(raster.lines.size());
-    result.glyphs.reserve(raster.glyphs.size());
+    result.glyphs.reserve(shape.summary.clusterCount);
 
     for (std::size_t lineIndex = 0; lineIndex < raster.lines.size();
          ++lineIndex) {
@@ -2099,35 +2174,14 @@ public:
       assignLineIndex(lineLayout.diagnostics, lineIndex);
       const int alignOffset =
           computeHorizontalAlignOffset(layoutContext, lineLayout.metrics);
-      if (alignOffset != 0) {
-        for (PositionedGlyph &glyph : lineLayout.glyphs) {
-          glyph.originX += alignOffset;
-        }
+      for (PositionedGlyph &lineGlyph : lineLayout.glyphs) {
+        lineGlyph.originX += alignOffset;
+        PositionedGlyph glyph = lineGlyph;
+        glyph.lineIndex = lineIndex;
+        glyph.originY += result.lineOriginsY[lineIndex];
+        result.glyphs.push_back(std::move(glyph));
       }
       result.lines.push_back(std::move(lineLayout));
-    }
-    for (const RasterizedGlyph &rasterGlyph : raster.glyphs) {
-      PositionedGlyph glyph;
-      glyph.handle = rasterGlyph.handle;
-      glyph.glyphId = rasterGlyph.glyphId;
-      glyph.lineIndex = rasterGlyph.lineIndex;
-      glyph.clusterIndex = rasterGlyph.clusterIndex;
-      glyph.glyphIndexInCluster = rasterGlyph.glyphIndexInCluster;
-      glyph.glyph = rasterGlyph.glyph;
-      glyph.originX = rasterGlyph.penX + glyph.glyph.bearingX;
-      glyph.originY = result.lines[glyph.lineIndex].metrics.baseline -
-                      glyph.glyph.bearingY + rasterGlyph.penY;
-      glyph.isColorGlyph = rasterGlyph.isColorGlyph;
-      glyph.fallbackApplied = rasterGlyph.fallbackApplied;
-      glyph.atlasRect = {0, 0, glyph.glyph.image.width,
-                         glyph.glyph.image.height};
-      glyph.materialKind = pickMaterialKind(glyph.isColorGlyph);
-      glyph.samplerKind = pickSamplerKind(glyph.isColorGlyph);
-      glyph.blendHint = pickBlendHint(glyph.isColorGlyph);
-      const int alignOffset = computeHorizontalAlignOffset(
-          layoutContext, result.lines[glyph.lineIndex].metrics);
-      glyph.originX += alignOffset;
-      result.glyphs.push_back(std::move(glyph));
     }
     result.diagnosticsSummary =
         buildDiagnosticsSummary(result.diagnostics, result.summary);
@@ -2235,14 +2289,8 @@ private:
     if (layoutContext.fontChainId.value != 0) {
       return m_context.resolveFontFallbackChain(layoutContext.fontChainId);
     }
-    return makeEffectiveFallbackChain(layoutContext.fallbackChain);
-  }
-
-  [[nodiscard]] TextLayoutContext
-  withResolvedFallbackChain(const TextLayoutContext &layoutContext) const {
-    TextLayoutContext resolved = layoutContext;
-    resolved.fallbackChain = resolveFallbackChain(layoutContext);
-    return resolved;
+    m_context.validateFontPaths(layoutContext.fallbackChain);
+    return layoutContext.fallbackChain;
   }
 
   [[nodiscard]] int computeLineAdvance(const TextLayoutContext &layoutContext,
@@ -2334,37 +2382,50 @@ private:
     std::vector<const FontContext *> usedFonts;
     int penX = 0;
 
+    struct CandidateFont {
+      const std::string &path;
+      FontContext *font = nullptr;
+    };
+    const auto makeCandidates = [&](const auto &primary,
+                                    const auto &secondary) {
+      std::vector<CandidateFont> candidates;
+      for (const auto *paths :
+           {&primary, &fallbackChain.symbolFonts, &secondary}) {
+        for (const std::string &path : *paths) {
+          candidates.push_back({path});
+        }
+      }
+      return candidates;
+    };
+    auto textCandidates =
+        makeCandidates(fallbackChain.textFonts, fallbackChain.emojiFonts);
+    auto emojiCandidates =
+        makeCandidates(fallbackChain.emojiFonts, fallbackChain.textFonts);
+
     for (std::size_t clusterIndex = 0; clusterIndex < clusters.size();
          ++clusterIndex) {
       const TextCluster &cluster = clusters[clusterIndex];
       const FontRole requestedRole = pickRequestedRole(cluster);
-      const bool prefersEmoji = requestedRole == FontRole::Emoji;
-      std::vector<std::string> candidatePaths =
-          prefersEmoji ? fallbackChain.emojiFonts : fallbackChain.textFonts;
-      candidatePaths.insert(candidatePaths.end(),
-                            fallbackChain.symbolFonts.begin(),
-                            fallbackChain.symbolFonts.end());
-      const std::vector<std::string> &secondary =
-          prefersEmoji ? fallbackChain.textFonts : fallbackChain.emojiFonts;
-      candidatePaths.insert(candidatePaths.end(), secondary.begin(),
-                            secondary.end());
+      auto &candidates =
+          requestedRole == FontRole::Emoji ? emojiCandidates : textCandidates;
 
       FontContext *selectedFont = nullptr;
       std::vector<ShapedGlyph> shapedGlyphs;
       std::vector<std::string> attemptedFonts;
       std::size_t selectedIndex = 0;
-      for (std::size_t i = 0; i < candidatePaths.size(); ++i) {
-        const std::string resolvedPath =
-            resolveExistingPath({candidatePaths[i]});
-        attemptedFonts.push_back(resolvedPath);
-        FontContext &candidate =
-            m_context.getFont(resolvedPath, layoutContext.pixelSize);
-        shapedGlyphs = shapeTextCluster(candidate, cluster);
+      for (std::size_t i = 0; i < candidates.size(); ++i) {
+        CandidateFont &candidate = candidates[i];
+        if (candidate.font == nullptr) {
+          candidate.font =
+              &m_context.getFont(candidate.path, layoutContext.pixelSize);
+        }
+        attemptedFonts.push_back(candidate.path);
+        shapedGlyphs = shapeTextCluster(*candidate.font, cluster);
         if (std::all_of(shapedGlyphs.begin(), shapedGlyphs.end(),
                         [](const ShapedGlyph &glyph) {
                           return glyph.m_glyphId != 0;
                         })) {
-          selectedFont = &candidate;
+          selectedFont = candidate.font;
           selectedIndex = i;
           break;
         }
@@ -2396,12 +2457,16 @@ private:
         diagnostics.push_back(std::move(diagnostic));
       }
 
-      resolvedClusters.push_back(
-          {cluster, shapedGlyphs, selectedFont, requestedRole, attemptedFonts,
-           penX, selectedIndex > 0,
-           clusterUsesColorRendering(*selectedFont, shapedGlyphs)});
-      usedFonts.push_back(selectedFont);
       penX += computeShapedAdvance(shapedGlyphs);
+      const bool isColor =
+          clusterUsesColorRendering(*selectedFont, shapedGlyphs);
+      resolvedClusters.push_back({cluster, std::move(shapedGlyphs),
+                                  selectedFont, requestedRole,
+                                  std::move(attemptedFonts), clusterIndex,
+                                  selectedIndex > 0, isColor});
+      if (usedFonts.empty() || usedFonts.back() != selectedFont) {
+        usedFonts.push_back(selectedFont);
+      }
     }
 
     metrics = buildLineMetrics({}, usedFonts, layoutContext.pixelSize, penX);
@@ -2430,6 +2495,17 @@ DokuTextContext::resolveFontFallbackChain(FontChainId fontChainId) const {
   return m_impl->resolveFontFallbackChain(fontChainId);
 }
 
+namespace {
+
+struct PendingGlyphImage {
+  GlyphBitmap bitmap;
+  GlyphImageMetrics metrics;
+};
+
+using PendingGlyphImages = std::unordered_map<std::uint64_t, PendingGlyphImage>;
+
+} // namespace
+
 class GlyphAtlasCache::Impl {
 public:
   explicit Impl(const AtlasBuildContext &context) : m_context(context) {
@@ -2442,19 +2518,19 @@ public:
   }
 
   GlyphAtlasCacheUpdate ensureGlyphs(const TextLineLayout &layout) {
-    GlyphAtlasCacheUpdate update;
-    update.summary = layout.summary;
-    ensureGlyphsInternal(layout.glyphs, update);
-    update.summary.atlasPageCount = m_pages.size();
-    update.diagnosticsSummary =
-        buildDiagnosticsSummary(update.diagnostics, update.summary);
-    return update;
+    return ensureGlyphs(layout.glyphs, layout.summary);
   }
 
   GlyphAtlasCacheUpdate ensureGlyphs(const MultiLineLayout &layout) {
+    return ensureGlyphs(layout.glyphs, layout.summary);
+  }
+
+  GlyphAtlasCacheUpdate ensureGlyphs(const std::vector<PositionedGlyph> &glyphs,
+                                     const LineSummary &summary,
+                                     PendingGlyphImages *images = nullptr) {
     GlyphAtlasCacheUpdate update;
-    update.summary = layout.summary;
-    ensureGlyphsInternal(layout.glyphs, update);
+    update.summary = summary;
+    ensureGlyphsInternal(glyphs, update, images);
     update.summary.atlasPageCount = m_pages.size();
     update.diagnosticsSummary =
         buildDiagnosticsSummary(update.diagnostics, update.summary);
@@ -2463,24 +2539,44 @@ public:
 
   GlyphAtlasCacheUpdate evict(const std::vector<GlyphHandle> &handles) {
     GlyphAtlasCacheUpdate update;
-    for (const GlyphHandle handle : handles) {
-      auto glyphIt = m_glyphsByHandle.find(handle.value);
-      if (glyphIt == m_glyphsByHandle.end()) {
-        continue;
+    std::unordered_set<std::uint64_t> evicted;
+    for (GlyphHandle handle : handles) {
+      if (m_entriesByHandle.contains(handle.value) &&
+          evicted.insert(handle.value).second) {
+        update.evictedHandles.push_back(handle);
       }
-      m_glyphsByHandle.erase(glyphIt);
-      m_entriesByHandle.erase(handle.value);
-      update.evictedHandles.push_back(handle);
     }
-    repack(update);
+    if (evicted.empty()) {
+      update.summary.atlasPageCount = m_pages.size();
+      update.summary.glyphCount = m_entriesByHandle.size();
+      return update;
+    }
+
+    repack(update, evicted);
+    for (GlyphHandle handle : update.evictedHandles) {
+      m_glyphsByHandle.erase(handle.value);
+    }
+    ++m_glyphSetRevision;
+    ++m_atlasTextureRevision;
     return update;
   }
 
   GlyphAtlasCacheUpdate compact() {
     GlyphAtlasCacheUpdate update;
-    repack(update);
+    if (!m_pages.empty()) {
+      repack(update, {});
+      ++m_atlasTextureRevision;
+    }
     return update;
   }
+
+  [[nodiscard]] const GlyphImageMetrics *findImage(GlyphHandle handle) const {
+    const auto it = m_glyphsByHandle.find(handle.value);
+    return it == m_glyphsByHandle.end() ? nullptr : &it->second.metrics;
+  }
+
+  std::uint64_t m_glyphSetRevision = 0;
+  std::uint64_t m_atlasTextureRevision = 0;
 
   [[nodiscard]] const AtlasBuildContext &atlasContext() const {
     return m_context;
@@ -2488,6 +2584,10 @@ public:
 
   [[nodiscard]] const std::vector<GlyphAtlasPage> &pages() const {
     return m_pages;
+  }
+
+  [[nodiscard]] std::vector<GlyphAtlasPage> takePages() {
+    return std::move(m_pages);
   }
 
   [[nodiscard]] bool containsGlyph(GlyphHandle handle) const {
@@ -2583,6 +2683,7 @@ public:
 private:
   struct CachedGlyph {
     PositionedGlyph glyph;
+    GlyphImageMetrics metrics;
   };
 
   struct PackingState {
@@ -2593,14 +2694,27 @@ private:
   };
 
   void ensureGlyphsInternal(const std::vector<PositionedGlyph> &glyphs,
-                            GlyphAtlasCacheUpdate &update) {
+                            GlyphAtlasCacheUpdate &update,
+                            PendingGlyphImages *images = nullptr) {
+    bool recordRevision = true;
     for (std::size_t glyphIndex = 0; glyphIndex < glyphs.size(); ++glyphIndex) {
       const PositionedGlyph &glyph = glyphs[glyphIndex];
       if (m_entriesByHandle.contains(glyph.handle.value)) {
         continue;
       }
-      const BitmapImage &image = glyph.glyph.image;
-      if (image.width <= 0 || image.height <= 0) {
+      PendingGlyphImage *pending = nullptr;
+      if (images != nullptr) {
+        const auto it = images->find(glyph.handle.value);
+        if (it == images->end()) {
+          continue;
+        }
+        pending = &it->second;
+      }
+      const BitmapImage &image =
+          pending != nullptr ? pending->bitmap.image : glyph.glyph.image;
+      if (image.width <= 0 || image.height <= 0 ||
+          image.rgba.size() < static_cast<std::size_t>(image.width) *
+                                  static_cast<std::size_t>(image.height) * 4U) {
         continue;
       }
       if (image.width + m_context.padding * 2 > m_context.pageWidth ||
@@ -2618,52 +2732,77 @@ private:
         continue;
       }
 
-      PackingState &state = m_packingStates[glyph.materialKind];
-
-      if (state.currentPage == -1) {
-        addPage(update, glyph.materialKind);
+      if (recordRevision) {
+        ++m_glyphSetRevision;
+        ++m_atlasTextureRevision;
+        recordRevision = false;
       }
-      if (state.penX + image.width + m_context.padding > m_context.pageWidth) {
-        state.penX = m_context.padding;
-        state.penY += state.rowHeight + m_context.padding;
-        state.rowHeight = 0;
+      CachedGlyph source;
+      if (pending != nullptr) {
+        source = {glyph, pending->metrics};
+        source.glyph.glyph.image.rgba = std::move(pending->bitmap.image.rgba);
+      } else {
+        const bool usesColor =
+            glyph.isColorGlyph || bitmapUsesColorRendering(image);
+        source = {glyph, glyphImageMetrics(glyph.glyph, usesColor)};
       }
-      if (state.penY + image.height + m_context.padding >
-          m_context.pageHeight) {
-        addPage(update, glyph.materialKind);
+      auto it =
+          m_glyphsByHandle.emplace(glyph.handle.value, std::move(source)).first;
+      try {
+        packGlyph(it->second.glyph, it->second.glyph.glyph.image, glyphIndex,
+                  update, images == nullptr);
+      } catch (...) {
+        m_glyphsByHandle.erase(it);
+        throw;
       }
-
-      GlyphAtlasPage &page = m_pages[state.currentPage];
-      blitBitmapImage(page.image, image, state.penX, state.penY);
-
-      GlyphAtlasEntry entry;
-      entry.handle = glyph.handle;
-      entry.glyphId = glyph.glyphId;
-      entry.lineIndex = glyph.lineIndex;
-      entry.clusterIndex = glyph.clusterIndex;
-      entry.glyphIndexInCluster = glyph.glyphIndexInCluster;
-      entry.glyphIndex = glyphIndex;
-      entry.pageIndex = state.currentPage;
-      entry.pageHandle = page.handle;
-      entry.pixelRect = {state.penX, state.penY, state.penX + image.width,
-                         state.penY + image.height};
-      entry.uvRect = toNormalizedUvRect(entry.pixelRect, m_context.pageWidth,
-                                        m_context.pageHeight);
-      entry.isColorGlyph = glyph.isColorGlyph;
-      entry.materialKind = glyph.materialKind;
-      entry.samplerKind = glyph.samplerKind;
-      entry.blendHint = glyph.blendHint;
-      m_entriesByHandle.emplace(entry.handle.value, entry);
-      m_glyphsByHandle.emplace(entry.handle.value, CachedGlyph{glyph});
-      update.updatedEntries.push_back(entry);
-      update.dirtyRects.push_back({entry.pageHandle, entry.pixelRect});
-
-      state.penX += image.width + m_context.padding;
-      state.rowHeight = std::max(state.rowHeight, image.height);
     }
   }
 
-  void addPage(GlyphAtlasCacheUpdate &update, MaterialKind materialKind) {
+  void packGlyph(const PositionedGlyph &glyph, const BitmapImage &image,
+                 std::size_t glyphIndex, GlyphAtlasCacheUpdate &update,
+                 bool includePagePixels) {
+    PackingState &state = m_packingStates[glyph.materialKind];
+
+    if (state.currentPage == -1) {
+      addPage(update, glyph.materialKind, includePagePixels);
+    }
+    if (state.penX + image.width + m_context.padding > m_context.pageWidth) {
+      state.penX = m_context.padding;
+      state.penY += state.rowHeight + m_context.padding;
+      state.rowHeight = 0;
+    }
+    if (state.penY + image.height + m_context.padding > m_context.pageHeight) {
+      addPage(update, glyph.materialKind, includePagePixels);
+    }
+
+    GlyphAtlasPage &page = m_pages[state.currentPage];
+    GlyphAtlasEntry entry;
+    entry.handle = glyph.handle;
+    entry.glyphId = glyph.glyphId;
+    entry.lineIndex = glyph.lineIndex;
+    entry.clusterIndex = glyph.clusterIndex;
+    entry.glyphIndexInCluster = glyph.glyphIndexInCluster;
+    entry.glyphIndex = glyphIndex;
+    entry.pageIndex = state.currentPage;
+    entry.pageHandle = page.handle;
+    entry.pixelRect = {state.penX, state.penY, state.penX + image.width,
+                       state.penY + image.height};
+    entry.uvRect = toNormalizedUvRect(entry.pixelRect, m_context.pageWidth,
+                                      m_context.pageHeight);
+    entry.isColorGlyph = glyph.isColorGlyph;
+    entry.materialKind = glyph.materialKind;
+    entry.samplerKind = glyph.samplerKind;
+    entry.blendHint = glyph.blendHint;
+    update.updatedEntries.push_back(entry);
+    update.dirtyRects.push_back({entry.pageHandle, entry.pixelRect});
+    m_entriesByHandle.emplace(entry.handle.value, entry);
+    blitBitmapImage(page.image, image, state.penX, state.penY);
+    state.penX += image.width + m_context.padding;
+    state.rowHeight = std::max(state.rowHeight, image.height);
+  }
+
+  void addPage(GlyphAtlasCacheUpdate &update, MaterialKind materialKind,
+               bool includePagePixels) {
     GlyphAtlasPage page;
     page.handle =
         GlyphAtlasPageHandle{static_cast<std::uint32_t>(m_pages.size() + 1U)};
@@ -2673,65 +2812,74 @@ private:
                                static_cast<std::size_t>(m_context.pageHeight) *
                                4U,
                            0U);
-    m_pages.push_back(page);
+    if (includePagePixels) {
+      update.newPages.push_back(page);
+    } else {
+      update.newPages.push_back(
+          {page.handle, {page.image.width, page.image.height, {}}});
+    }
     m_pageMaterialKinds.push_back(materialKind);
-    update.newPages.push_back(page);
+    try {
+      m_pages.push_back(std::move(page));
+    } catch (...) {
+      m_pageMaterialKinds.pop_back();
+      throw;
+    }
 
-    PackingState &state = m_packingStates[materialKind];
+    PackingState &state = m_packingStates.at(materialKind);
     state.currentPage = static_cast<int>(m_pages.size() - 1);
     state.penX = m_context.padding;
     state.penY = m_context.padding;
     state.rowHeight = 0;
   }
 
-  void resetPacking() {
-    m_pages.clear();
-    m_pageMaterialKinds.clear();
-    m_entriesByHandle.clear();
-    m_packingStates.clear();
-  }
-
-  void repack(GlyphAtlasCacheUpdate &update) {
-    std::vector<PositionedGlyph> glyphs;
-    glyphs.reserve(m_glyphsByHandle.size());
+  void repack(GlyphAtlasCacheUpdate &update,
+              const std::unordered_set<std::uint64_t> &evicted) {
+    std::vector<const PositionedGlyph *> glyphs;
+    glyphs.reserve(m_glyphsByHandle.size() - evicted.size());
     for (const auto &[handle, cached] : m_glyphsByHandle) {
-      (void)handle;
-      glyphs.push_back(cached.glyph);
+      if (!evicted.contains(handle)) {
+        glyphs.push_back(&cached.glyph);
+      }
     }
     std::sort(glyphs.begin(), glyphs.end(),
-              [](const PositionedGlyph &lhs, const PositionedGlyph &rhs) {
-                if (lhs.lineIndex != rhs.lineIndex) {
-                  return lhs.lineIndex < rhs.lineIndex;
+              [](const PositionedGlyph *lhs, const PositionedGlyph *rhs) {
+                if (lhs->lineIndex != rhs->lineIndex) {
+                  return lhs->lineIndex < rhs->lineIndex;
                 }
-                if (lhs.clusterIndex != rhs.clusterIndex) {
-                  return lhs.clusterIndex < rhs.clusterIndex;
+                if (lhs->clusterIndex != rhs->clusterIndex) {
+                  return lhs->clusterIndex < rhs->clusterIndex;
                 }
-                return lhs.glyphIndexInCluster < rhs.glyphIndexInCluster;
+                return lhs->glyphIndexInCluster < rhs->glyphIndexInCluster;
               });
 
-    resetPacking();
-    ensureGlyphsInternal(glyphs, update);
-    update.summary.glyphCount = glyphs.size();
-    update.summary.atlasPageCount = m_pages.size();
-    for (const auto &[handle, cached] : m_glyphsByHandle) {
-      (void)handle;
-      appendUniqueFont(update.summary.usedFonts, cached.glyph.glyph.fontPath);
-      if (cached.glyph.isColorGlyph) {
+    Impl replacement(m_context);
+    for (std::size_t index = 0; index < glyphs.size(); ++index) {
+      const PositionedGlyph &glyph = *glyphs[index];
+      replacement.packGlyph(glyph, glyph.glyph.image, index, update, false);
+      appendUniqueFont(update.summary.usedFonts, glyph.glyph.fontPath);
+      if (glyph.isColorGlyph) {
         ++update.summary.colorGlyphCount;
       }
-      if (cached.glyph.fallbackApplied) {
+      if (glyph.fallbackApplied) {
         ++update.summary.fallbackCount;
       }
     }
-    update.newPages = m_pages;
+    update.summary.glyphCount = glyphs.size();
+    update.summary.atlasPageCount = replacement.m_pages.size();
+    update.newPages = replacement.m_pages;
     update.dirtyRects.clear();
-    for (const GlyphAtlasPage &page : m_pages) {
+    for (const GlyphAtlasPage &page : replacement.m_pages) {
       update.dirtyRects.push_back(
           {page.handle, {0, 0, page.image.width, page.image.height}});
     }
-    update.updatedEntries = entries();
+    update.updatedEntries = replacement.entries();
     update.diagnosticsSummary =
         buildDiagnosticsSummary(update.diagnostics, update.summary);
+    m_pages.swap(replacement.m_pages);
+    m_pageMaterialKinds.swap(replacement.m_pageMaterialKinds);
+    m_entriesByHandle.swap(replacement.m_entriesByHandle);
+    m_packingStates.swap(replacement.m_packingStates);
   }
 
   AtlasBuildContext m_context;
@@ -2749,8 +2897,19 @@ GlyphAtlasCache::~GlyphAtlasCache() = default;
 
 GlyphAtlasCache::GlyphAtlasCache(GlyphAtlasCache &&) noexcept = default;
 
-GlyphAtlasCache &
-GlyphAtlasCache::operator=(GlyphAtlasCache &&) noexcept = default;
+GlyphAtlasCache &GlyphAtlasCache::operator=(GlyphAtlasCache &&other) noexcept {
+  if (this != &other) {
+    if (m_impl && other.m_impl) {
+      other.m_impl->m_glyphSetRevision = std::max(
+          other.m_impl->m_glyphSetRevision, m_impl->m_glyphSetRevision + 1);
+      other.m_impl->m_atlasTextureRevision =
+          std::max(other.m_impl->m_atlasTextureRevision,
+                   m_impl->m_atlasTextureRevision + 1);
+    }
+    m_impl = std::move(other.m_impl);
+  }
+  return *this;
+}
 
 GlyphAtlasCacheUpdate
 GlyphAtlasCache::ensureGlyphs(const TextLineLayout &layout) {
@@ -2888,43 +3047,102 @@ TextDrawRun DokuText::buildDrawRun(const TextLineLayout &layout,
   return result;
 }
 
-TextDrawRun DokuText::buildDrawRun(const TextLineLayout &layout,
-                                   const GlyphAtlasCache &atlasCache) const {
+namespace {
+
+void applyAtlasEntry(PositionedGlyph &glyph, const GlyphAtlasEntry &entry) {
+  glyph.atlasPage = entry.pageIndex;
+  glyph.atlasPageHandle = entry.pageHandle;
+  glyph.atlasRect = entry.pixelRect;
+  glyph.uvRect = entry.uvRect;
+  glyph.materialKind = entry.materialKind;
+  glyph.samplerKind = entry.samplerKind;
+  glyph.blendHint = entry.blendHint;
+}
+
+template <typename FindEntry>
+TextDrawRun buildAtlasDrawRun(const TextLineLayout &layout, FindEntry findEntry,
+                              std::size_t pageCount, const char *missingMessage,
+                              int originY = 0) {
   TextDrawRun result;
   result.metrics = layout.metrics;
   result.summary = layout.summary;
+  result.summary.atlasPageCount = pageCount;
   result.fallbackTrace = layout.fallbackTrace;
   result.diagnostics = layout.diagnostics;
   result.glyphs = layout.glyphs;
 
   for (PositionedGlyph &glyph : result.glyphs) {
-    const GlyphAtlasEntry *entry = atlasCache.m_impl->findEntry(glyph.handle);
-    if (entry == nullptr) {
-      Diagnostic diagnostic;
-      diagnostic.severity = DiagnosticSeverity::Warning;
-      diagnostic.code = DiagnosticCode::AtlasEntryMissing;
-      diagnostic.lineIndex = glyph.lineIndex;
-      diagnostic.clusterIndex = glyph.clusterIndex;
-      diagnostic.message = "atlas entry missing for glyph handle";
-      diagnostic.clusterText = encodeUtf8(glyph.glyph.codePoints);
-      diagnostic.codePoints = glyph.glyph.codePoints;
-      diagnostic.fontPath = glyph.glyph.fontPath;
-      result.diagnostics.push_back(std::move(diagnostic));
+    glyph.originY += originY;
+    const GlyphAtlasEntry *entry = findEntry(glyph.handle);
+    if (entry != nullptr) {
+      applyAtlasEntry(glyph, *entry);
       continue;
     }
-    glyph.atlasPage = entry->pageIndex;
-    glyph.atlasPageHandle = entry->pageHandle;
-    glyph.atlasRect = entry->pixelRect;
-    glyph.uvRect = entry->uvRect;
-    glyph.materialKind = entry->materialKind;
-    glyph.samplerKind = entry->samplerKind;
-    glyph.blendHint = entry->blendHint;
+    result.diagnostics.push_back(
+        {DiagnosticSeverity::Warning, DiagnosticCode::AtlasEntryMissing,
+         glyph.lineIndex, glyph.clusterIndex, missingMessage,
+         encodeUtf8(glyph.glyph.codePoints), glyph.glyph.codePoints,
+         glyph.glyph.fontPath});
   }
 
-  result.summary.atlasPageCount = atlasCache.pages().size();
   result.diagnosticsSummary =
       buildDiagnosticsSummary(result.diagnostics, result.summary);
   return result;
+}
+
+template <typename FindEntry>
+MultiLineDrawRun buildAtlasDrawText(const MultiLineLayout &layout,
+                                    FindEntry findEntry, std::size_t pageCount,
+                                    const char *missingMessage) {
+  MultiLineDrawRun result;
+  result.lineTexts = layout.lineTexts;
+  result.lineOriginsY = layout.lineOriginsY;
+  result.lineSummaries = layout.lineSummaries;
+  result.fallbackTrace = layout.fallbackTrace;
+  result.summary = layout.summary;
+  result.summary.atlasPageCount = pageCount;
+  result.boundingBox = layout.boundingBox;
+  result.lineAdvance = layout.lineAdvance;
+  result.lines.reserve(layout.lines.size());
+
+  for (std::size_t lineIndex = 0; lineIndex < layout.lines.size();
+       ++lineIndex) {
+    const int originY = lineIndex < layout.lineOriginsY.size()
+                            ? layout.lineOriginsY[lineIndex]
+                            : 0;
+    TextDrawRun drawRun = buildAtlasDrawRun(layout.lines[lineIndex], findEntry,
+                                            pageCount, missingMessage, originY);
+    for (PositionedGlyph &glyph : drawRun.glyphs) {
+      glyph.lineIndex = lineIndex;
+    }
+    assignLineIndex(drawRun.diagnostics, lineIndex);
+    result.diagnostics.insert(result.diagnostics.end(),
+                              drawRun.diagnostics.begin(),
+                              drawRun.diagnostics.end());
+    result.lines.push_back(std::move(drawRun));
+  }
+  result.glyphs = layout.glyphs;
+  for (PositionedGlyph &glyph : result.glyphs) {
+    if (const GlyphAtlasEntry *entry = findEntry(glyph.handle)) {
+      applyAtlasEntry(glyph, *entry);
+    }
+  }
+  result.diagnosticsSummary =
+      buildDiagnosticsSummary(result.diagnostics, result.summary);
+  return result;
+}
+
+constexpr char CACHE_GLYPH_MISSING[] = "atlas entry missing for glyph handle";
+constexpr char BAKED_GLYPH_MISSING[] = "glyph is not present in baked atlas";
+
+} // namespace
+
+TextDrawRun DokuText::buildDrawRun(const TextLineLayout &layout,
+                                   const GlyphAtlasCache &atlasCache) const {
+  return buildAtlasDrawRun(
+      layout,
+      [&](GlyphHandle handle) { return atlasCache.m_impl->findEntry(handle); },
+      atlasCache.pages().size(), CACHE_GLYPH_MISSING);
 }
 
 MultiLineLayout DokuText::layoutText(const TextLayoutContext &context,
@@ -2958,56 +3176,16 @@ MultiLineDrawRun DokuText::buildDrawText(const MultiLineLayout &layout,
 MultiLineDrawRun
 DokuText::buildDrawText(const MultiLineLayout &layout,
                         const GlyphAtlasCache &atlasCache) const {
-  MultiLineDrawRun result;
-  result.lineTexts = layout.lineTexts;
-  result.lineOriginsY = layout.lineOriginsY;
-  result.lineSummaries = layout.lineSummaries;
-  result.fallbackTrace = layout.fallbackTrace;
-  result.summary = layout.summary;
-  result.boundingBox = layout.boundingBox;
-  result.lineAdvance = layout.lineAdvance;
-  result.diagnostics.clear();
-  result.lines.reserve(layout.lines.size());
-  result.glyphs.reserve(layout.glyphs.size());
-
-  for (const TextLineLayout &line : layout.lines) {
-    TextDrawRun drawRun = buildDrawRun(line, atlasCache);
-    const std::size_t lineIndex = result.lines.size();
-    const int originY = lineIndex < layout.lineOriginsY.size()
-                            ? layout.lineOriginsY[lineIndex]
-                            : 0;
-    for (PositionedGlyph &glyph : drawRun.glyphs) {
-      glyph.lineIndex = lineIndex;
-      glyph.originY += originY;
-    }
-    result.diagnostics.insert(result.diagnostics.end(),
-                              drawRun.diagnostics.begin(),
-                              drawRun.diagnostics.end());
-    result.lines.push_back(std::move(drawRun));
-  }
-  result.glyphs = layout.glyphs;
-  for (PositionedGlyph &glyph : result.glyphs) {
-    const GlyphAtlasEntry *entry = atlasCache.m_impl->findEntry(glyph.handle);
-    if (entry == nullptr) {
-      continue;
-    }
-    glyph.atlasPage = entry->pageIndex;
-    glyph.atlasPageHandle = entry->pageHandle;
-    glyph.atlasRect = entry->pixelRect;
-    glyph.uvRect = entry->uvRect;
-    glyph.materialKind = entry->materialKind;
-    glyph.samplerKind = entry->samplerKind;
-    glyph.blendHint = entry->blendHint;
-  }
+  MultiLineDrawRun result = buildAtlasDrawText(
+      layout,
+      [&](GlyphHandle handle) { return atlasCache.m_impl->findEntry(handle); },
+      atlasCache.pages().size(), CACHE_GLYPH_MISSING);
 
   AtlasBuildResult atlasSnapshot;
   atlasSnapshot.pages = atlasCache.pages();
   atlasSnapshot.entries = atlasCache.entries();
   atlasSnapshot.summary.atlasPageCount = atlasSnapshot.pages.size();
   result.atlases.push_back(std::move(atlasSnapshot));
-  result.summary.atlasPageCount = atlasCache.pages().size();
-  result.diagnosticsSummary =
-      buildDiagnosticsSummary(result.diagnostics, result.summary);
   return result;
 }
 
@@ -3061,18 +3239,6 @@ pickRepresentativeCodePoint(const PositionedGlyph &glyph) {
     return glyph.glyph.codePoints.front();
   }
   return 0U;
-}
-
-[[nodiscard]] bool bitmapUsesColorRendering(const BitmapImage &image) {
-  for (std::size_t offset = 0; offset + 3U < image.rgba.size(); offset += 4U) {
-    const std::uint8_t r = image.rgba[offset + 0U];
-    const std::uint8_t g = image.rgba[offset + 1U];
-    const std::uint8_t b = image.rgba[offset + 2U];
-    if (r != g || g != b) {
-      return true;
-    }
-  }
-  return false;
 }
 
 [[nodiscard]] bool diagnosticIndicatesMissingGlyph(DiagnosticCode code) {
@@ -3187,15 +3353,14 @@ applyCompatibilityConstraints(TextCompatibilityReport report,
 [[nodiscard]] TextDrawSubmission
 buildSubmissionFromGlyphs(const std::vector<PositionedGlyph> &glyphs,
                           const LineMetrics &metrics, int lineAdvance,
-                          const std::vector<FallbackTraceEntry> &trace,
                           const std::vector<Diagnostic> &diagnostics,
-                          const Rect &fallbackBoundingBox) {
+                          const Rect &fallbackBoundingBox,
+                          const TextCompatibilityReport &compatibility) {
   TextDrawSubmission submission;
   submission.metrics = metrics;
   submission.lineAdvance = lineAdvance;
   submission.diagnostics = diagnostics;
-  submission.compatibility =
-      analyzeCompatibilityFromGlyphs(glyphs, trace, diagnostics);
+  submission.compatibility = compatibility;
   submission.diagnostics.insert(submission.diagnostics.end(),
                                 submission.compatibility.diagnostics.begin(),
                                 submission.compatibility.diagnostics.end());
@@ -3242,12 +3407,14 @@ void appendConstraintDiagnostic(std::vector<Diagnostic> &diagnostics,
 
 [[nodiscard]] std::vector<AtlasPageUploadPlan>
 buildUploadPlanFromCache(const GlyphAtlasCache &atlasCache,
-                         const GlyphAtlasCacheUpdate &update) {
+                         const GlyphAtlasCacheUpdate &update,
+                         bool includeUnchangedPages = true) {
   std::vector<AtlasPageUploadPlan> plans;
   std::unordered_map<std::uint32_t, std::size_t> planIndexByHandle;
 
   const std::vector<GlyphAtlasPage> &pages = atlasCache.pages();
-  for (std::size_t pageIndex = 0; pageIndex < pages.size(); ++pageIndex) {
+  for (std::size_t pageIndex = 0;
+       includeUnchangedPages && pageIndex < pages.size(); ++pageIndex) {
     AtlasPageUploadPlan plan;
     plan.pageHandle = pages[pageIndex].handle;
     plan.pageIndex = static_cast<int>(pageIndex);
@@ -3262,6 +3429,11 @@ buildUploadPlanFromCache(const GlyphAtlasCache &atlasCache,
     }
     AtlasPageUploadPlan plan;
     plan.pageHandle = handle;
+    // Cache pages are allocated sequentially, with one-based handles.
+    const std::size_t index = static_cast<std::size_t>(handle.value) - 1;
+    if (index < pages.size() && pages[index].handle.value == handle.value) {
+      plan.pageIndex = static_cast<int>(index);
+    }
     planIndexByHandle.emplace(handle.value, plans.size());
     plans.push_back(std::move(plan));
     return plans.back();
@@ -3270,14 +3442,6 @@ buildUploadPlanFromCache(const GlyphAtlasCache &atlasCache,
   for (const GlyphAtlasPage &page : update.newPages) {
     AtlasPageUploadPlan &plan = ensurePlan(page.handle);
     plan.isNewPage = true;
-    if (plan.pageIndex < 0) {
-      for (std::size_t pageIndex = 0; pageIndex < pages.size(); ++pageIndex) {
-        if (pages[pageIndex].handle.value == page.handle.value) {
-          plan.pageIndex = static_cast<int>(pageIndex);
-          break;
-        }
-      }
-    }
   }
 
   for (const GlyphAtlasDirtyRect &dirtyRect : update.dirtyRects) {
@@ -3343,21 +3507,37 @@ analyzeTextCompatibility(const MultiLineDrawRun &run,
                                        constraints);
 }
 
-TextDrawSubmission buildTextDrawSubmission(const TextDrawRun &run) {
+namespace {
+
+TextDrawSubmission
+buildSubmission(const TextDrawRun &run,
+                const TextCompatibilityReport &compatibility) {
   return buildSubmissionFromGlyphs(run.glyphs, run.metrics,
-                                   run.metrics.lineWidth, run.fallbackTrace,
-                                   run.diagnostics, run.metrics.boundingBox);
+                                   run.metrics.lineWidth, run.diagnostics,
+                                   run.metrics.boundingBox, compatibility);
 }
 
-TextDrawSubmission buildTextDrawSubmission(const MultiLineDrawRun &run) {
+TextDrawSubmission
+buildSubmission(const MultiLineDrawRun &run,
+                const TextCompatibilityReport &compatibility) {
   LineMetrics metrics;
   if (!run.lines.empty()) {
     metrics = run.lines.front().metrics;
   }
   metrics.boundingBox = run.boundingBox;
   return buildSubmissionFromGlyphs(run.glyphs, metrics, run.lineAdvance,
-                                   run.fallbackTrace, run.diagnostics,
-                                   run.boundingBox);
+                                   run.diagnostics, run.boundingBox,
+                                   compatibility);
+}
+
+} // namespace
+
+TextDrawSubmission buildTextDrawSubmission(const TextDrawRun &run) {
+  return buildSubmission(run, analyzeTextCompatibility(run));
+}
+
+TextDrawSubmission buildTextDrawSubmission(const MultiLineDrawRun &run) {
+  return buildSubmission(run, analyzeTextCompatibility(run));
 }
 
 std::vector<AtlasPageUploadPlan>
@@ -3571,53 +3751,6 @@ collectPreparedDiagnostics(const std::vector<Diagnostic> &layoutDiagnostics,
   return diagnostics;
 }
 
-struct BakedGlyphKey {
-  std::string m_fontPath;
-  std::uint32_t m_glyphId = 0;
-  unsigned int m_pixelSize = 0;
-  unsigned int m_paletteIndex = 0;
-  bool m_isColorGlyph = false;
-
-  bool operator==(const BakedGlyphKey &other) const {
-    return m_fontPath == other.m_fontPath && m_glyphId == other.m_glyphId &&
-           m_pixelSize == other.m_pixelSize &&
-           m_paletteIndex == other.m_paletteIndex &&
-           m_isColorGlyph == other.m_isColorGlyph;
-  }
-};
-
-struct BakedGlyphKeyHasher {
-  std::size_t operator()(const BakedGlyphKey &key) const {
-    std::size_t hash = 0;
-    hash = static_cast<std::size_t>(fnv1aAppend(hash, key.m_fontPath));
-    hash = static_cast<std::size_t>(
-        fnv1aAppend(hash, static_cast<std::uint64_t>(key.m_glyphId)));
-    hash = static_cast<std::size_t>(
-        fnv1aAppend(hash, static_cast<std::uint64_t>(key.m_pixelSize)));
-    hash = static_cast<std::size_t>(
-        fnv1aAppend(hash, static_cast<std::uint64_t>(key.m_paletteIndex)));
-    hash = static_cast<std::size_t>(fnv1aAppend(
-        hash, static_cast<std::uint64_t>(key.m_isColorGlyph ? 1U : 0U)));
-    return hash;
-  }
-};
-
-[[nodiscard]] BakedGlyphKey makeBakedGlyphKey(std::string_view fontPath,
-                                              std::uint32_t glyphId,
-                                              unsigned int pixelSize,
-                                              unsigned int paletteIndex,
-                                              bool isColorGlyph) {
-  return {std::string(fontPath), glyphId, pixelSize, paletteIndex,
-          isColorGlyph};
-}
-
-[[nodiscard]] BakedGlyphKey makeBakedGlyphKey(const PositionedGlyph &glyph,
-                                              unsigned int pixelSize,
-                                              unsigned int paletteIndex) {
-  return makeBakedGlyphKey(glyph.glyph.fontPath, glyph.glyphId, pixelSize,
-                           paletteIndex, glyph.isColorGlyph);
-}
-
 [[nodiscard]] std::vector<std::string>
 collectMissingGlyphs(const std::vector<Diagnostic> &diagnostics) {
   std::vector<std::string> missingGlyphs;
@@ -3635,49 +3768,6 @@ collectMissingGlyphs(const std::vector<Diagnostic> &diagnostics) {
     }
   }
   return missingGlyphs;
-}
-
-[[nodiscard]] TextAtlasAppendPlan buildTextAtlasAppendPlanFromLayout(
-    const TextAtlas &atlas, const MultiLineLayout &layout,
-    const TextAtlasAppendBudget &budget) {
-  TextAtlasAppendPlan plan;
-  std::unordered_set<std::uint64_t> uniqueHandles;
-  plan.candidates.reserve(layout.glyphs.size());
-  uniqueHandles.reserve(layout.glyphs.size());
-
-  for (const PositionedGlyph &glyph : layout.glyphs) {
-    if (atlas.containsGlyph(glyph.handle)) {
-      continue;
-    }
-    if (!uniqueHandles.insert(glyph.handle.value).second) {
-      continue;
-    }
-
-    plan.candidates.push_back({
-        glyph.glyph.codePoints.empty() ? 0U : glyph.glyph.codePoints.front(),
-        glyph.handle, glyph.glyphId, atlas.options().fontChainId,
-        glyph.glyph.fontPath, glyph.materialKind, glyph.isColorGlyph});
-    ++plan.estimatedGlyphCount;
-    if (glyph.isColorGlyph) {
-      ++plan.estimatedColorGlyphCount;
-    }
-    plan.estimatedUploadBytes +=
-        static_cast<std::size_t>(glyph.glyph.image.width) *
-        static_cast<std::size_t>(glyph.glyph.image.height) * 4U;
-  }
-
-  if (budget.maxGlyphs > 0 && plan.estimatedGlyphCount > budget.maxGlyphs) {
-    plan.budgetExceeded = true;
-  }
-  if (budget.maxColorGlyphs > 0 &&
-      plan.estimatedColorGlyphCount > budget.maxColorGlyphs) {
-    plan.budgetExceeded = true;
-  }
-  if (budget.maxAtlasUploadBytes > 0 &&
-      plan.estimatedUploadBytes > budget.maxAtlasUploadBytes) {
-    plan.budgetExceeded = true;
-  }
-  return plan;
 }
 
 [[nodiscard]] std::uint64_t
@@ -3885,8 +3975,6 @@ public:
   GlyphAtlasCache m_cache;
   GlyphAtlasCacheUpdate m_lastUpdate;
   std::vector<AtlasPageUploadPlan> m_lastUploadPlan;
-  std::uint64_t m_glyphSetRevision = 0;
-  std::uint64_t m_atlasTextureRevision = 0;
 };
 
 TextAtlas::TextAtlas(const TextAtlasOptions &options)
@@ -3896,7 +3984,19 @@ TextAtlas::~TextAtlas() = default;
 
 TextAtlas::TextAtlas(TextAtlas &&) noexcept = default;
 
-TextAtlas &TextAtlas::operator=(TextAtlas &&) noexcept = default;
+TextAtlas &TextAtlas::operator=(TextAtlas &&other) noexcept {
+  if (this != &other) {
+    if (m_impl && other.m_impl) {
+      auto &incoming = *other.m_impl->m_cache.m_impl;
+      incoming.m_glyphSetRevision =
+          std::max(incoming.m_glyphSetRevision, glyphSetRevision() + 1);
+      incoming.m_atlasTextureRevision =
+          std::max(incoming.m_atlasTextureRevision, atlasTextureRevision() + 1);
+    }
+    m_impl = std::move(other.m_impl);
+  }
+  return *this;
+}
 
 const TextAtlasOptions &TextAtlas::options() const { return m_impl->m_options; }
 
@@ -3913,11 +4013,11 @@ const std::vector<AtlasPageUploadPlan> &TextAtlas::lastUploadPlan() const {
 }
 
 std::uint64_t TextAtlas::glyphSetRevision() const {
-  return m_impl->m_glyphSetRevision;
+  return m_impl->m_cache.m_impl->m_glyphSetRevision;
 }
 
 std::uint64_t TextAtlas::atlasTextureRevision() const {
-  return m_impl->m_atlasTextureRevision;
+  return m_impl->m_cache.m_impl->m_atlasTextureRevision;
 }
 
 const std::vector<GlyphAtlasPage> &TextAtlas::pages() const {
@@ -3971,15 +4071,14 @@ class BakedTextAtlas::Impl {
 public:
   explicit Impl(const TextAtlasBakeRequest &request) : m_request(request) {}
 
-  [[nodiscard]] const GlyphAtlasEntry *
-  findEntry(const PositionedGlyph &glyph) const {
-    const BakedGlyphKey key =
-        makeBakedGlyphKey(glyph, m_request.pixelSize, m_request.paletteIndex);
-    const auto it = m_entriesByKey.find(key);
-    if (it == m_entriesByKey.end()) {
-      return nullptr;
-    }
-    return &m_entries[it->second];
+  [[nodiscard]] const GlyphAtlasEntry *findEntry(GlyphHandle handle) const {
+    const auto it = m_entryIndices.find(handle.value);
+    return it == m_entryIndices.end() ? nullptr : &m_entries[it->second];
+  }
+
+  [[nodiscard]] const GlyphImageMetrics *findImage(GlyphHandle handle) const {
+    const auto it = m_entryIndices.find(handle.value);
+    return it == m_entryIndices.end() ? nullptr : &m_imageMetrics[it->second];
   }
 
   TextAtlasBakeRequest m_request;
@@ -3993,8 +4092,8 @@ public:
   std::vector<Diagnostic> m_diagnostics;
   std::vector<AtlasPixelFormat> m_pagePixelFormats;
   std::vector<std::vector<MaterialKind>> m_pageMaterialKinds;
-  std::unordered_map<BakedGlyphKey, std::size_t, BakedGlyphKeyHasher>
-      m_entriesByKey;
+  std::unordered_map<std::uint64_t, std::size_t> m_entryIndices;
+  std::vector<GlyphImageMetrics> m_imageMetrics;
   std::uint64_t m_revision = 0;
 };
 
@@ -4074,6 +4173,81 @@ class TextSystem::Impl {
 public:
   Impl() : m_renderer(m_context) {}
 
+  template <typename Atlas>
+  auto makeAtlasImageFetcher(const TextLayoutContext &context,
+                             const Atlas &atlas,
+                             PendingGlyphImages *pendingImages,
+                             DokuText::Impl::RasterSession &session) const {
+    return [&, pendingImages](const ShapedCluster &cluster,
+                              RasterizedGlyph &glyph,
+                              std::vector<Diagnostic> &diagnostics) {
+      if (cluster.glyphs.empty()) {
+        return false;
+      }
+      if (const GlyphImageMetrics *metrics = atlas.findImage(glyph.handle)) {
+        setImageMetrics(glyph.glyph, *metrics);
+        glyph.isColorGlyph = glyph.isColorGlyph || metrics->usesColor;
+        return true;
+      }
+      if (pendingImages == nullptr) {
+        // Keep the cluster's advances and caret positions for atlas misses.
+        return true;
+      }
+
+      auto [it, inserted] = pendingImages->try_emplace(glyph.handle.value);
+      PendingGlyphImage &pending = it->second;
+      if (inserted) {
+        pending.bitmap = m_renderer.m_impl->renderCluster(
+            context, cluster, session, glyph.clusterIndex, diagnostics);
+        pending.metrics = glyphImageMetrics(pending.bitmap, glyph.isColorGlyph);
+      } else if (pending.bitmap.image.rgba.empty()) {
+        diagnostics.push_back(
+            {DiagnosticSeverity::Warning, DiagnosticCode::MissingGlyphCluster,
+             0, glyph.clusterIndex, "glyph cluster could not be rasterized",
+             cluster.text, cluster.codePoints, cluster.fontPath});
+      }
+      setImageMetrics(glyph.glyph, pending.metrics);
+      glyph.glyph.advance = pending.bitmap.advance;
+      glyph.isColorGlyph = glyph.isColorGlyph || pending.metrics.usesColor;
+      return !pending.bitmap.image.rgba.empty();
+    };
+  }
+
+  template <typename Atlas>
+  TextLineLayout
+  layoutAtlasLine(const TextLayoutContext &context, std::string_view text,
+                  const Atlas &atlas,
+                  PendingGlyphImages *pendingImages = nullptr) const {
+    if (text.empty()) {
+      return m_renderer.m_impl->layoutLine(context, text);
+    }
+    const TextShapeResult shape = m_renderer.shapeLine(context, text);
+    DokuText::Impl::RasterSession session;
+    auto fetchImage =
+        makeAtlasImageFetcher(context, atlas, pendingImages, session);
+    return m_renderer.layoutLine(
+        m_renderer.m_impl->rasterizeLine(context, shape, fetchImage));
+  }
+
+  template <typename Atlas>
+  MultiLineLayout
+  layoutAtlasText(const TextLayoutContext &context, std::string_view text,
+                  const Atlas &atlas,
+                  PendingGlyphImages *pendingImages = nullptr) const {
+    const MultiLineShapeResult shape = m_renderer.shapeText(context, text);
+    DokuText::Impl::RasterSession session;
+    auto fetchImage =
+        makeAtlasImageFetcher(context, atlas, pendingImages, session);
+    return m_renderer.m_impl->layoutText(context, shape, fetchImage);
+  }
+
+  void recordAtlasUpdate(TextAtlas &atlas, const GlyphAtlasCacheUpdate &update,
+                         std::vector<AtlasPageUploadPlan> &plans) const {
+    plans = buildUploadPlanFromCache(atlas.cache(), update, false);
+    atlas.m_impl->m_lastUpdate = update;
+    atlas.m_impl->m_lastUploadPlan = plans;
+  }
+
   DokuTextContext m_context;
   DokuText m_renderer;
 };
@@ -4139,13 +4313,17 @@ TextSystem::bakeTextAtlas(const TextAtlasBakeRequest &request) const {
   textRequest.paletteIndex = request.paletteIndex;
   textRequest.pixelSize = request.pixelSize;
 
-  const MultiLineLayout layout = m_impl->m_renderer.layoutText(textRequest);
   GlyphAtlasCache cache(request.atlasContext);
-  const GlyphAtlasCacheUpdate update = cache.ensureGlyphs(layout);
+  PendingGlyphImages pending;
+  const MultiLineLayout layout =
+      m_impl->layoutAtlasText(makeTextLayoutContext(textRequest),
+                              textRequest.text, *cache.m_impl, &pending);
+  const GlyphAtlasCacheUpdate update =
+      cache.m_impl->ensureGlyphs(layout.glyphs, layout.summary, &pending);
 
-  bakedAtlas.m_impl->m_pages = cache.pages();
-  bakedAtlas.m_impl->m_entries = cache.entries();
   bakedAtlas.m_impl->m_uploadPlan = buildAtlasPageUploadPlan(cache, update);
+  bakedAtlas.m_impl->m_pages = cache.m_impl->takePages();
+  bakedAtlas.m_impl->m_entries = cache.entries();
   bakedAtlas.m_impl->m_compatibility = analyzeTextCompatibility(layout);
   bakedAtlas.m_impl->m_summary = layout.summary;
   bakedAtlas.m_impl->m_summary.atlasPageCount =
@@ -4163,22 +4341,13 @@ TextSystem::bakeTextAtlas(const TextAtlasBakeRequest &request) const {
   bakedAtlas.m_impl->m_pageMaterialKinds.resize(
       bakedAtlas.m_impl->m_pages.size());
 
-  std::unordered_map<std::uint64_t, const PositionedGlyph *> glyphByHandle;
-  for (const PositionedGlyph &glyph : layout.glyphs) {
-    glyphByHandle.emplace(glyph.handle.value, &glyph);
-  }
-
-  for (std::size_t entryIndex = 0;
-       entryIndex < bakedAtlas.m_impl->m_entries.size(); ++entryIndex) {
-    const GlyphAtlasEntry &entry = bakedAtlas.m_impl->m_entries[entryIndex];
-    const auto glyphIt = glyphByHandle.find(entry.handle.value);
-    if (glyphIt == glyphByHandle.end()) {
-      continue;
-    }
-    const PositionedGlyph &glyph = *glyphIt->second;
-    bakedAtlas.m_impl->m_entriesByKey.emplace(
-        makeBakedGlyphKey(glyph, request.pixelSize, request.paletteIndex),
-        entryIndex);
+  bakedAtlas.m_impl->m_imageMetrics.reserve(
+      bakedAtlas.m_impl->m_entries.size());
+  for (const GlyphAtlasEntry &entry : bakedAtlas.m_impl->m_entries) {
+    bakedAtlas.m_impl->m_entryIndices.emplace(
+        entry.handle.value, bakedAtlas.m_impl->m_imageMetrics.size());
+    bakedAtlas.m_impl->m_imageMetrics.push_back(
+        *cache.m_impl->findImage(entry.handle));
     if (entry.pageIndex >= 0 &&
         static_cast<std::size_t>(entry.pageIndex) <
             bakedAtlas.m_impl->m_pageMaterialKinds.size()) {
@@ -4252,8 +4421,68 @@ TextAtlasAppendPlan TextSystem::buildTextAtlasAppendPlan(
     return plan;
   }
 
-  const MultiLineLayout layout = m_impl->m_renderer.layoutText(request);
-  return buildTextAtlasAppendPlanFromLayout(atlas, layout, budget);
+  const TextLayoutContext context = makeTextLayoutContext(request);
+  const MultiLineShapeResult shape =
+      m_impl->m_renderer.shapeText(context, request.text);
+  std::unordered_set<std::uint64_t> uniqueHandles;
+  std::vector<const ShapedCluster *> missingClusters;
+  for (const TextShapeResult &line : shape.lines) {
+    for (const ShapedCluster &cluster : line.clusters) {
+      if (cluster.glyphs.empty()) {
+        continue;
+      }
+      const GlyphHandle handle = clusterGlyphHandle(cluster, context);
+      if (atlas.containsGlyph(handle) ||
+          !uniqueHandles.insert(handle.value).second) {
+        continue;
+      }
+      const ShapedGlyphInfo &first = cluster.glyphs.front();
+      plan.candidates.push_back(
+          {cluster.codePoints.empty() ? 0U : cluster.codePoints.front(), handle,
+           first.glyphId, request.fontChainId, cluster.fontPath,
+           pickMaterialKind(first.isColorGlyph), first.isColorGlyph});
+      missingClusters.push_back(&cluster);
+      if (first.isColorGlyph) {
+        ++plan.estimatedColorGlyphCount;
+      }
+    }
+  }
+
+  plan.estimatedGlyphCount = plan.candidates.size();
+  plan.budgetExceeded =
+      (budget.maxGlyphs > 0 && plan.estimatedGlyphCount > budget.maxGlyphs) ||
+      (budget.maxColorGlyphs > 0 &&
+       plan.estimatedColorGlyphCount > budget.maxColorGlyphs);
+  if (plan.budgetExceeded) {
+    return plan;
+  }
+
+  // The upload-byte budget uses exact bitmap dimensions, including composited
+  // color glyphs. Only unique, missing candidates reach this stage.
+  DokuText::Impl::RasterSession session;
+  std::vector<Diagnostic> diagnostics;
+  std::size_t renderableCount = 0;
+  plan.estimatedColorGlyphCount = 0;
+  for (std::size_t index = 0; index < missingClusters.size(); ++index) {
+    const GlyphBitmap bitmap = m_impl->m_renderer.m_impl->renderCluster(
+        context, *missingClusters[index], session, 0, diagnostics);
+    if (bitmap.image.rgba.empty()) {
+      continue;
+    }
+    plan.estimatedUploadBytes += bitmap.image.rgba.size();
+    if (plan.candidates[index].isColorGlyph) {
+      ++plan.estimatedColorGlyphCount;
+    }
+    if (renderableCount != index) {
+      plan.candidates[renderableCount] = std::move(plan.candidates[index]);
+    }
+    ++renderableCount;
+  }
+  plan.candidates.resize(renderableCount);
+  plan.estimatedGlyphCount = renderableCount;
+  plan.budgetExceeded = budget.maxAtlasUploadBytes > 0 &&
+                        plan.estimatedUploadBytes > budget.maxAtlasUploadBytes;
+  return plan;
 }
 
 TextProbeResult TextSystem::probeText(const TextAtlas &atlas,
@@ -4268,24 +4497,20 @@ TextProbeResult TextSystem::probeText(const TextAtlas &atlas,
 
   for (const TextShapeResult &line : shape.lines) {
     for (const ShapedCluster &cluster : line.clusters) {
-      for (const ShapedGlyphInfo &glyph : cluster.glyphs) {
-        ++result.resolvedGlyphCount;
-        if (atlas.containsGlyph(glyph.handle)) {
-          ++result.alreadyPresentGlyphCount;
-        } else {
-          ++result.missingGlyphCount;
-
-          MissingAtlasGlyph missing;
-          missing.codePoint =
-              !cluster.codePoints.empty() ? cluster.codePoints.front() : 0U;
-          missing.handle = glyph.handle;
-          missing.glyphId = glyph.glyphId;
-          missing.fontChainId = request.fontChainId;
-          missing.fontPath = cluster.fontPath;
-          missing.materialKind = pickMaterialKind(glyph.isColorGlyph);
-          missing.isColorGlyph = glyph.isColorGlyph;
-          result.missingGlyphs.push_back(std::move(missing));
-        }
+      if (cluster.glyphs.empty()) {
+        continue;
+      }
+      const ShapedGlyphInfo &glyph = cluster.glyphs.front();
+      const GlyphHandle handle = clusterGlyphHandle(cluster, context);
+      ++result.resolvedGlyphCount;
+      if (atlas.containsGlyph(handle)) {
+        ++result.alreadyPresentGlyphCount;
+      } else {
+        ++result.missingGlyphCount;
+        result.missingGlyphs.push_back(
+            {cluster.codePoints.empty() ? 0U : cluster.codePoints.front(),
+             handle, glyph.glyphId, request.fontChainId, cluster.fontPath,
+             pickMaterialKind(glyph.isColorGlyph), glyph.isColorGlyph});
       }
     }
   }
@@ -4317,11 +4542,15 @@ TextSystem::seedAtlas(TextAtlas &atlas,
   TextRequest request = makeAtlasBackedRequest(
       atlas.options(), encodeSeedText(result.codePoints, seedRequest.texts),
       prepareOptions);
-  const MultiLineLayout layout = m_impl->m_renderer.layoutText(request);
+  PendingGlyphImages pending;
+  auto &cache = *atlas.cache().m_impl;
+  const MultiLineLayout layout = m_impl->layoutAtlasText(
+      makeTextLayoutContext(request), request.text, cache, &pending);
 
   const std::size_t pageCountBefore = atlas.pages().size();
 
-  result.atlasUpdate = atlas.m_impl->m_cache.ensureGlyphs(layout);
+  result.atlasUpdate =
+      cache.ensureGlyphs(layout.glyphs, layout.summary, &pending);
   result.compatibility = analyzeTextCompatibility(layout);
   result.diagnostics = collectPreparedDiagnostics(
       layout.diagnostics, result.compatibility.diagnostics,
@@ -4336,26 +4565,9 @@ TextSystem::seedAtlas(TextAtlas &atlas,
   result.missingGlyphCount = collectMissingGlyphs(result.diagnostics).size();
   result.atlasChanged = (result.insertedGlyphCount > 0) ||
                         (atlas.pages().size() > pageCountBefore);
-  const bool glyphSetChanged =
-      !result.atlasUpdate.updatedEntries.empty() ||
-      !result.atlasUpdate.evictedHandles.empty();
-  const bool atlasTextureChanged =
-      glyphSetChanged || !result.atlasUpdate.newPages.empty() ||
-      !result.atlasUpdate.dirtyRects.empty();
-  if (glyphSetChanged) {
-    ++atlas.m_impl->m_glyphSetRevision;
-  }
-  if (atlasTextureChanged) {
-    ++atlas.m_impl->m_atlasTextureRevision;
-  }
-
   if (result.atlasChanged) {
-    atlas.m_impl->m_lastUpdate = result.atlasUpdate;
-    atlas.m_impl->m_lastUploadPlan =
-        buildAtlasPageUploadPlan(atlas.m_impl->m_cache, result.atlasUpdate);
-    result.atlasUploadPlan = atlas.m_impl->m_lastUploadPlan;
-  } else {
-    result.atlasUploadPlan.clear();
+    m_impl->recordAtlasUpdate(atlas, result.atlasUpdate,
+                              result.atlasUploadPlan);
   }
 
   return result;
@@ -4378,34 +4590,31 @@ PreparedTextLine
 TextSystem::prepareLine(TextAtlas &atlas, const TextRequest &request,
                         const TextPrepareOptions &options) const {
   PreparedTextLine result;
-  result.layout = m_impl->m_renderer.layoutLine(request);
+  auto &cache = *atlas.cache().m_impl;
+  PendingGlyphImages pending;
+  result.layout = m_impl->layoutAtlasLine(
+      makeTextLayoutContext(request), request.text, cache,
+      options.allowGlyphAppend ? &pending : nullptr);
   if (options.allowGlyphAppend) {
-    result.atlasUpdate = atlas.m_impl->m_cache.ensureGlyphs(result.layout);
-    const bool glyphSetChanged =
-        !result.atlasUpdate.updatedEntries.empty() ||
-        !result.atlasUpdate.evictedHandles.empty();
-    const bool atlasTextureChanged =
-        glyphSetChanged || !result.atlasUpdate.newPages.empty() ||
-        !result.atlasUpdate.dirtyRects.empty();
-    if (glyphSetChanged) {
-      ++atlas.m_impl->m_glyphSetRevision;
-    }
-    if (atlasTextureChanged) {
-      ++atlas.m_impl->m_atlasTextureRevision;
-    }
-    atlas.m_impl->m_lastUpdate = result.atlasUpdate;
-    atlas.m_impl->m_lastUploadPlan =
-        buildAtlasPageUploadPlan(atlas.m_impl->m_cache, result.atlasUpdate);
-    result.atlasUploadPlan = atlas.m_impl->m_lastUploadPlan;
-    result.drawRun =
-        m_impl->m_renderer.buildDrawRun(result.layout, atlas.m_impl->m_cache);
-  } else {
-    result.drawRun = m_impl->m_renderer.buildDrawRun(
-        result.layout, static_cast<const GlyphAtlasCache &>(atlas.cache()));
+    result.atlasUpdate = cache.ensureGlyphs(result.layout.glyphs,
+                                            result.layout.summary, &pending);
+    m_impl->recordAtlasUpdate(atlas, result.atlasUpdate,
+                              result.atlasUploadPlan);
   }
+  result.glyphSetRevision = atlas.glyphSetRevision();
+  result.atlasTextureRevision = atlas.atlasTextureRevision();
+  result.drawRun = buildAtlasDrawRun(
+      result.layout,
+      [&](GlyphHandle handle) { return cache.findEntry(handle); },
+      atlas.pages().size(), CACHE_GLYPH_MISSING);
   result.caretBoundaries = result.layout.caretBoundaries;
+  result.drawRun.diagnostics.insert(result.drawRun.diagnostics.end(),
+                                    result.atlasUpdate.diagnostics.begin(),
+                                    result.atlasUpdate.diagnostics.end());
+  result.drawRun.diagnosticsSummary = buildDiagnosticsSummary(
+      result.drawRun.diagnostics, result.drawRun.summary);
   result.compatibility = analyzeTextCompatibility(result.drawRun);
-  result.submission = buildTextDrawSubmission(result.drawRun);
+  result.submission = buildSubmission(result.drawRun, result.compatibility);
   result.diagnostics = collectPreparedDiagnostics(
       result.layout.diagnostics, result.drawRun.diagnostics,
       result.atlasUpdate.diagnostics);
@@ -4430,33 +4639,30 @@ PreparedTextParagraph
 TextSystem::prepareText(TextAtlas &atlas, const TextRequest &request,
                         const TextPrepareOptions &options) const {
   PreparedTextParagraph result;
-  result.layout = m_impl->m_renderer.layoutText(request);
+  auto &cache = *atlas.cache().m_impl;
+  PendingGlyphImages pending;
+  result.layout = m_impl->layoutAtlasText(
+      makeTextLayoutContext(request), request.text, cache,
+      options.allowGlyphAppend ? &pending : nullptr);
   if (options.allowGlyphAppend) {
-    result.atlasUpdate = atlas.m_impl->m_cache.ensureGlyphs(result.layout);
-    const bool glyphSetChanged =
-        !result.atlasUpdate.updatedEntries.empty() ||
-        !result.atlasUpdate.evictedHandles.empty();
-    const bool atlasTextureChanged =
-        glyphSetChanged || !result.atlasUpdate.newPages.empty() ||
-        !result.atlasUpdate.dirtyRects.empty();
-    if (glyphSetChanged) {
-      ++atlas.m_impl->m_glyphSetRevision;
-    }
-    if (atlasTextureChanged) {
-      ++atlas.m_impl->m_atlasTextureRevision;
-    }
-    atlas.m_impl->m_lastUpdate = result.atlasUpdate;
-    atlas.m_impl->m_lastUploadPlan =
-        buildAtlasPageUploadPlan(atlas.m_impl->m_cache, result.atlasUpdate);
-    result.atlasUploadPlan = atlas.m_impl->m_lastUploadPlan;
-    result.drawRun =
-        m_impl->m_renderer.buildDrawText(result.layout, atlas.m_impl->m_cache);
-  } else {
-    result.drawRun = m_impl->m_renderer.buildDrawText(
-        result.layout, static_cast<const GlyphAtlasCache &>(atlas.cache()));
+    result.atlasUpdate = cache.ensureGlyphs(result.layout.glyphs,
+                                            result.layout.summary, &pending);
+    m_impl->recordAtlasUpdate(atlas, result.atlasUpdate,
+                              result.atlasUploadPlan);
   }
+  result.glyphSetRevision = atlas.glyphSetRevision();
+  result.atlasTextureRevision = atlas.atlasTextureRevision();
+  result.drawRun = buildAtlasDrawText(
+      result.layout,
+      [&](GlyphHandle handle) { return cache.findEntry(handle); },
+      atlas.pages().size(), CACHE_GLYPH_MISSING);
+  result.drawRun.diagnostics.insert(result.drawRun.diagnostics.end(),
+                                    result.atlasUpdate.diagnostics.begin(),
+                                    result.atlasUpdate.diagnostics.end());
+  result.drawRun.diagnosticsSummary = buildDiagnosticsSummary(
+      result.drawRun.diagnostics, result.drawRun.summary);
   result.compatibility = analyzeTextCompatibility(result.drawRun);
-  result.submission = buildTextDrawSubmission(result.drawRun);
+  result.submission = buildSubmission(result.drawRun, result.compatibility);
   result.diagnostics = collectPreparedDiagnostics(
       result.layout.diagnostics, result.drawRun.diagnostics,
       result.atlasUpdate.diagnostics);
@@ -4467,6 +4673,7 @@ TextSystem::prepareText(TextAtlas &atlas, const TextRequest &request,
 PreparedTextLine TextSystem::layoutTextLine(const BakedTextAtlas &atlas,
                                             const TextRequest &request) const {
   PreparedTextLine result;
+  result.bakedAtlasRevision = atlas.revision();
   if (request.fontChainId.value != atlas.request().fontChainId.value ||
       request.pixelSize != atlas.request().pixelSize ||
       request.paletteIndex != atlas.request().paletteIndex) {
@@ -4477,43 +4684,15 @@ PreparedTextLine TextSystem::layoutTextLine(const BakedTextAtlas &atlas,
     return result;
   }
 
-  result.layout = m_impl->m_renderer.layoutLine(request);
-  result.drawRun.metrics = result.layout.metrics;
-  result.drawRun.summary = result.layout.summary;
-  result.drawRun.summary.atlasPageCount = atlas.pages().size();
-  result.drawRun.fallbackTrace = result.layout.fallbackTrace;
-  result.drawRun.glyphs = result.layout.glyphs;
-  result.drawRun.diagnostics = result.layout.diagnostics;
-
-  for (PositionedGlyph &glyph : result.drawRun.glyphs) {
-    const GlyphAtlasEntry *entry = atlas.m_impl->findEntry(glyph);
-    if (entry == nullptr) {
-      Diagnostic diagnostic;
-      diagnostic.severity = DiagnosticSeverity::Warning;
-      diagnostic.code = DiagnosticCode::AtlasEntryMissing;
-      diagnostic.lineIndex = glyph.lineIndex;
-      diagnostic.clusterIndex = glyph.clusterIndex;
-      diagnostic.message = "glyph is not present in baked atlas";
-      diagnostic.clusterText = encodeUtf8(glyph.glyph.codePoints);
-      diagnostic.codePoints = glyph.glyph.codePoints;
-      diagnostic.fontPath = glyph.glyph.fontPath;
-      result.drawRun.diagnostics.push_back(std::move(diagnostic));
-      continue;
-    }
-    glyph.atlasPage = entry->pageIndex;
-    glyph.atlasPageHandle = entry->pageHandle;
-    glyph.atlasRect = entry->pixelRect;
-    glyph.uvRect = entry->uvRect;
-    glyph.materialKind = entry->materialKind;
-    glyph.samplerKind = entry->samplerKind;
-    glyph.blendHint = entry->blendHint;
-  }
-
-  result.drawRun.diagnosticsSummary = buildDiagnosticsSummary(
-      result.drawRun.diagnostics, result.drawRun.summary);
+  result.layout = m_impl->layoutAtlasLine(makeTextLayoutContext(request),
+                                          request.text, *atlas.m_impl);
+  result.drawRun = buildAtlasDrawRun(
+      result.layout,
+      [&](GlyphHandle handle) { return atlas.m_impl->findEntry(handle); },
+      atlas.pages().size(), BAKED_GLYPH_MISSING);
   result.caretBoundaries = result.layout.caretBoundaries;
   result.compatibility = analyzeTextCompatibility(result.drawRun);
-  result.submission = buildTextDrawSubmission(result.drawRun);
+  result.submission = buildSubmission(result.drawRun, result.compatibility);
   result.diagnostics = result.drawRun.diagnostics;
   result.missingGlyphs = collectMissingGlyphs(result.diagnostics);
   return result;
@@ -4523,6 +4702,7 @@ PreparedTextParagraph
 TextSystem::layoutTextParagraph(const BakedTextAtlas &atlas,
                                 const TextRequest &request) const {
   PreparedTextParagraph result;
+  result.bakedAtlasRevision = atlas.revision();
   if (request.fontChainId.value != atlas.request().fontChainId.value ||
       request.pixelSize != atlas.request().pixelSize ||
       request.paletteIndex != atlas.request().paletteIndex) {
@@ -4533,92 +4713,14 @@ TextSystem::layoutTextParagraph(const BakedTextAtlas &atlas,
     return result;
   }
 
-  result.layout = m_impl->m_renderer.layoutText(request);
-  result.drawRun.lineTexts = result.layout.lineTexts;
-  result.drawRun.lineOriginsY = result.layout.lineOriginsY;
-  result.drawRun.lineSummaries = result.layout.lineSummaries;
-  result.drawRun.fallbackTrace = result.layout.fallbackTrace;
-  result.drawRun.summary = result.layout.summary;
-  result.drawRun.summary.atlasPageCount = atlas.pages().size();
-  result.drawRun.boundingBox = result.layout.boundingBox;
-  result.drawRun.lineAdvance = result.layout.lineAdvance;
-  result.drawRun.glyphs = result.layout.glyphs;
-
-  result.drawRun.lines.reserve(result.layout.lines.size());
-  for (std::size_t lineIndex = 0; lineIndex < result.layout.lines.size();
-       ++lineIndex) {
-    TextDrawRun lineDrawRun;
-    lineDrawRun.metrics = result.layout.lines[lineIndex].metrics;
-    lineDrawRun.summary = result.layout.lines[lineIndex].summary;
-    lineDrawRun.summary.atlasPageCount = atlas.pages().size();
-    lineDrawRun.fallbackTrace = result.layout.lines[lineIndex].fallbackTrace;
-    lineDrawRun.glyphs = result.layout.lines[lineIndex].glyphs;
-    lineDrawRun.diagnostics = result.layout.lines[lineIndex].diagnostics;
-
-    const int originY = lineIndex < result.layout.lineOriginsY.size()
-                            ? result.layout.lineOriginsY[lineIndex]
-                            : 0;
-    for (PositionedGlyph &glyph : lineDrawRun.glyphs) {
-      const GlyphAtlasEntry *entry = atlas.m_impl->findEntry(glyph);
-      glyph.lineIndex = lineIndex;
-      glyph.originY += originY;
-      if (entry == nullptr) {
-        Diagnostic diagnostic;
-        diagnostic.severity = DiagnosticSeverity::Warning;
-        diagnostic.code = DiagnosticCode::AtlasEntryMissing;
-        diagnostic.lineIndex = glyph.lineIndex;
-        diagnostic.clusterIndex = glyph.clusterIndex;
-        diagnostic.message = "glyph is not present in baked atlas";
-        diagnostic.clusterText = encodeUtf8(glyph.glyph.codePoints);
-        diagnostic.codePoints = glyph.glyph.codePoints;
-        diagnostic.fontPath = glyph.glyph.fontPath;
-        lineDrawRun.diagnostics.push_back(std::move(diagnostic));
-        continue;
-      }
-      glyph.atlasPage = entry->pageIndex;
-      glyph.atlasPageHandle = entry->pageHandle;
-      glyph.atlasRect = entry->pixelRect;
-      glyph.uvRect = entry->uvRect;
-      glyph.materialKind = entry->materialKind;
-      glyph.samplerKind = entry->samplerKind;
-      glyph.blendHint = entry->blendHint;
-    }
-    lineDrawRun.diagnosticsSummary =
-        buildDiagnosticsSummary(lineDrawRun.diagnostics, lineDrawRun.summary);
-    result.drawRun.diagnostics.insert(result.drawRun.diagnostics.end(),
-                                      lineDrawRun.diagnostics.begin(),
-                                      lineDrawRun.diagnostics.end());
-    result.drawRun.lines.push_back(std::move(lineDrawRun));
-  }
-
-  for (PositionedGlyph &glyph : result.drawRun.glyphs) {
-    const GlyphAtlasEntry *entry = atlas.m_impl->findEntry(glyph);
-    if (entry == nullptr) {
-      Diagnostic diagnostic;
-      diagnostic.severity = DiagnosticSeverity::Warning;
-      diagnostic.code = DiagnosticCode::AtlasEntryMissing;
-      diagnostic.lineIndex = glyph.lineIndex;
-      diagnostic.clusterIndex = glyph.clusterIndex;
-      diagnostic.message = "glyph is not present in baked atlas";
-      diagnostic.clusterText = encodeUtf8(glyph.glyph.codePoints);
-      diagnostic.codePoints = glyph.glyph.codePoints;
-      diagnostic.fontPath = glyph.glyph.fontPath;
-      result.drawRun.diagnostics.push_back(std::move(diagnostic));
-      continue;
-    }
-    glyph.atlasPage = entry->pageIndex;
-    glyph.atlasPageHandle = entry->pageHandle;
-    glyph.atlasRect = entry->pixelRect;
-    glyph.uvRect = entry->uvRect;
-    glyph.materialKind = entry->materialKind;
-    glyph.samplerKind = entry->samplerKind;
-    glyph.blendHint = entry->blendHint;
-  }
-
-  result.drawRun.diagnosticsSummary = buildDiagnosticsSummary(
-      result.drawRun.diagnostics, result.drawRun.summary);
+  result.layout = m_impl->layoutAtlasText(makeTextLayoutContext(request),
+                                          request.text, *atlas.m_impl);
+  result.drawRun = buildAtlasDrawText(
+      result.layout,
+      [&](GlyphHandle handle) { return atlas.m_impl->findEntry(handle); },
+      atlas.pages().size(), BAKED_GLYPH_MISSING);
   result.compatibility = analyzeTextCompatibility(result.drawRun);
-  result.submission = buildTextDrawSubmission(result.drawRun);
+  result.submission = buildSubmission(result.drawRun, result.compatibility);
   result.diagnostics = result.drawRun.diagnostics;
   result.missingGlyphs = collectMissingGlyphs(result.diagnostics);
   return result;

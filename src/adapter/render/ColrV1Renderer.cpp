@@ -10,6 +10,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include FT_COLOR_H
@@ -952,8 +953,10 @@ private:
 
   void paintComposite(const FT_PaintComposite &composite) {
     bump(m_stats ? &m_stats->m_composites : nullptr);
-    log(std::string("paint composite ") +
-        compositeModeName(composite.composite_mode));
+    if (traceEnabled()) {
+      log(std::string("paint composite ") +
+          compositeModeName(composite.composite_mode));
+    }
     Bitmap backdrop = evaluateToBitmap(composite.backdrop_paint);
     Bitmap source = evaluateToBitmap(composite.source_paint);
     Bitmap combined =
@@ -1271,7 +1274,14 @@ private:
     ColrV1Renderer &m_renderer;
   };
 
+  [[nodiscard]] bool traceEnabled() const {
+    return m_options.m_enableTrace && m_options.m_traceStream != nullptr;
+  }
+
   void traceEnter(FT_PaintFormat format) {
+    if (!traceEnabled()) {
+      return;
+    }
     std::ostringstream stream;
     stream << "enter " << paintFormatName(format)
            << " format=" << static_cast<int>(format);
@@ -1286,14 +1296,17 @@ private:
     log("leave");
   }
 
-  void logValue(const std::string &label, unsigned int value) {
+  void logValue(std::string_view label, unsigned int value) {
+    if (!traceEnabled()) {
+      return;
+    }
     std::ostringstream stream;
     stream << label << "=" << value;
     log(stream.str());
   }
 
-  void log(const std::string &message) {
-    if (!m_options.m_enableTrace || m_options.m_traceStream == nullptr) {
+  void log(std::string_view message) {
+    if (!traceEnabled()) {
       return;
     }
     (*m_options.m_traceStream)

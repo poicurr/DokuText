@@ -89,6 +89,8 @@ private:
   std::unique_ptr<Impl> m_impl;
 
   friend class DokuText;
+  friend class TextSystem;
+  friend class TextAtlas;
 };
 
 class DokuText {
@@ -158,6 +160,7 @@ public:
 private:
   class Impl;
   std::unique_ptr<Impl> m_impl;
+  friend class TextSystem;
 };
 
 [[nodiscard]] TextCompatibilityReport
