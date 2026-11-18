@@ -99,7 +99,7 @@ if (DOKU_TEXT_BUILD_CLI)
   # It is intentionally built separately and does not pollute the library.
   add_executable(DokuTextCli
     src/cli/main.cpp
-    src/DokuText.cpp
+    src/cli/RunCli.cpp
   )
   set_target_properties(DokuTextCli PROPERTIES OUTPUT_NAME "dokutext-cli")
   target_include_directories(DokuTextCli PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -108,7 +108,7 @@ if (DOKU_TEXT_BUILD_CLI)
   if (WIN32)
     target_compile_definitions(DokuTextCli PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
   endif()
-  target_compile_definitions(DokuTextCli PRIVATE DOKU_TEXT_BUILD_CLI=1)
+  target_compile_definitions(DokuTextCli PRIVATE DOKU_TEXT_ENABLE_PNG_IO=$<BOOL:${DOKU_TEXT_ENABLE_PNG_IO}>)
 endif()
 
 if (DOKU_TEXT_BUILD_EXAMPLES)

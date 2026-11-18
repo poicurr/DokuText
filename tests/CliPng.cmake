@@ -1,0 +1,13 @@
+if(NOT EXISTS "${FONT}")
+  message("Missing CLI test font")
+  return()
+endif()
+file(MAKE_DIRECTORY "${OUTPUT_DIR}")
+set(output "${OUTPUT_DIR}/glyph_0_u1F363.png")
+file(REMOVE "${output}")
+execute_process(COMMAND "${CLI}" "${FONT}" "🍣"
+  WORKING_DIRECTORY "${OUTPUT_DIR}" COMMAND_ERROR_IS_FATAL ANY)
+file(READ "${output}" signature LIMIT 8 HEX)
+if(NOT signature STREQUAL "89504e470d0a1a0a")
+  message(FATAL_ERROR "Invalid PNG signature: ${signature}")
+endif()

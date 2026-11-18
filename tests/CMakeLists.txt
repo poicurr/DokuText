@@ -77,3 +77,12 @@ add_dokutext_test_with_fonts(DokuTextTestTextInputApi TextInputApiTest.cpp)
 target_include_directories(
   DokuTextTestColrV1GradientRender PRIVATE ${CMAKE_SOURCE_DIR}/src
 )
+
+if(TARGET DokuTextCli AND DOKU_TEXT_ENABLE_PNG_IO)
+  add_test(NAME DokuTextCliPng COMMAND "${CMAKE_COMMAND}"
+    "-DCLI=$<TARGET_FILE:DokuTextCli>"
+    "-DFONT=${PROJECT_SOURCE_DIR}/fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf"
+    "-DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/cli-png"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/CliPng.cmake")
+  set_tests_properties(DokuTextCliPng PROPERTIES SKIP_REGULAR_EXPRESSION "Missing CLI test font")
+endif()
