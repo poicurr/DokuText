@@ -4,7 +4,7 @@ function(add_dokutext_test target_name source_file)
   target_compile_features(${target_name} PRIVATE cxx_std_20)
   add_test(NAME ${target_name} COMMAND ${target_name})
   set_tests_properties(
-    ${target_name} PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    ${target_name} PROPERTIES WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
   )
 
   if(WIN32)
@@ -19,7 +19,7 @@ endfunction()
 function(add_dokutext_test_with_fonts target_name source_file)
   add_dokutext_test(${target_name} ${source_file})
   set_tests_properties(${target_name} PROPERTIES SKIP_RETURN_CODE 77)
-  target_include_directories(${target_name} PRIVATE ${CMAKE_SOURCE_DIR}/tests)
+  target_include_directories(${target_name} PRIVATE ${PROJECT_SOURCE_DIR}/tests)
 endfunction()
 
 add_dokutext_test_with_fonts(DokuTextTestRenderTextApi RenderTextApiTest.cpp)
@@ -44,10 +44,10 @@ if(DOKU_TEXT_ENABLE_PNG_IO)
   add_dokutext_test_with_fonts(DokuTextTestVisualPng VisualPngScenarioTest.cpp)
   add_dokutext_test_with_fonts(DokuTextTestBakedAtlasPng BakedAtlasPngTest.cpp)
   target_include_directories(
-    DokuTextTestVisualPng PRIVATE ${CMAKE_SOURCE_DIR}/src
+    DokuTextTestVisualPng PRIVATE ${PROJECT_SOURCE_DIR}/src
   )
   target_include_directories(
-    DokuTextTestBakedAtlasPng PRIVATE ${CMAKE_SOURCE_DIR}/src
+    DokuTextTestBakedAtlasPng PRIVATE ${PROJECT_SOURCE_DIR}/src
   )
 endif()
 
@@ -75,7 +75,7 @@ add_dokutext_test_with_fonts(DokuTextTestPrepareAllowGlyphAppend TextPrepareAllo
 add_dokutext_test_with_fonts(DokuTextTestTextInputApi TextInputApiTest.cpp)
 
 target_include_directories(
-  DokuTextTestColrV1GradientRender PRIVATE ${CMAKE_SOURCE_DIR}/src
+  DokuTextTestColrV1GradientRender PRIVATE ${PROJECT_SOURCE_DIR}/src
 )
 
 if(TARGET DokuTextCli AND DOKU_TEXT_ENABLE_PNG_IO)

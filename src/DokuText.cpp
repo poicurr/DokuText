@@ -1,5 +1,9 @@
 #include "core/GlyphRender.hpp"
 
+#include "adapter/render/ColrV0Renderer.hpp"
+#include <DokuText/DokuText.hpp>
+#include FT_GLYPH_H
+
 #include <algorithm>
 #include <array>
 #include <chrono>

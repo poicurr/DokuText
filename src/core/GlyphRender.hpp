@@ -1,18 +1,19 @@
 #pragma once
 
-#include "adapter/render/ColrV0Renderer.hpp"
 #include "adapter/render/ColrV1Renderer.hpp"
-#include <DokuText/DokuText.hpp>
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include FT_COLOR_H
-#include FT_GLYPH_H
 
 #include <hb-ft.h>
 
+#include <cstddef>
+#include <cstdint>
+#include <initializer_list>
 #include <memory>
-#include <unordered_map>
 #include <string>
+#include <type_traits>
+#include <unordered_map>
 #include <vector>
 
 namespace doku::text::detail {
@@ -71,11 +72,6 @@ struct FontContext {
   HbFontHandle m_hbFont;
 };
 
-struct RenderTarget {
-  FontContext *m_font = nullptr;
-  hb_codepoint_t m_glyphId = 0;
-};
-
 struct TextCluster {
   std::vector<std::uint32_t> m_codePoints;
   std::size_t m_beginByteOffset = 0;
@@ -123,31 +119,6 @@ struct CachedGlyphRender {
 
 using GlyphRenderCache =
     std::unordered_map<GlyphCacheKey, CachedGlyphRender, GlyphCacheKeyHasher>;
-
-struct ClusterCacheKey {
-  std::vector<std::uint32_t> m_codePoints;
-  unsigned int m_paletteIndex = 0;
-
-  bool operator==(const ClusterCacheKey &other) const {
-    return m_paletteIndex == other.m_paletteIndex &&
-           m_codePoints == other.m_codePoints;
-  }
-};
-
-struct ClusterCacheKeyHasher {
-  std::size_t operator()(const ClusterCacheKey &key) const {
-    std::size_t hash = static_cast<std::size_t>(key.m_paletteIndex);
-    for (std::uint32_t codePoint : key.m_codePoints) {
-      hash ^= static_cast<std::size_t>(codePoint) + 0x9e3779b9U + (hash << 6U) +
-              (hash >> 2U);
-    }
-    return hash;
-  }
-};
-
-using ClusterRenderCache =
-    std::unordered_map<ClusterCacheKey, ClusterRenderResult,
-                       ClusterCacheKeyHasher>;
 
 struct CacheStats {
   std::size_t m_glyphHits = 0;

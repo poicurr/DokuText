@@ -1,30 +1,49 @@
 #include "core/GlyphRender.hpp"
+
+#include <hb-ot.h>
 #if DOKU_TEXT_ENABLE_PNG_IO
 #include "adapter/io/PngWriter.hpp"
 #endif
 
 #include <algorithm>
-#include <array>
-#include <chrono>
-#include <cmath>
 #include <cstdint>
-#include <filesystem>
 #include <iostream>
-#include <iterator>
 #include <limits>
-#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <string_view>
-#include <type_traits>
 #include <unordered_map>
-#include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace doku::text {
 using namespace detail;
 namespace {
+struct ClusterCacheKey {
+  std::vector<std::uint32_t> m_codePoints;
+  unsigned int m_paletteIndex = 0;
+
+  bool operator==(const ClusterCacheKey &other) const {
+    return m_paletteIndex == other.m_paletteIndex &&
+           m_codePoints == other.m_codePoints;
+  }
+};
+
+struct ClusterCacheKeyHasher {
+  std::size_t operator()(const ClusterCacheKey &key) const {
+    std::size_t hash = static_cast<std::size_t>(key.m_paletteIndex);
+    for (std::uint32_t codePoint : key.m_codePoints) {
+      hash ^= static_cast<std::size_t>(codePoint) + 0x9e3779b9U + (hash << 6U) +
+              (hash >> 2U);
+    }
+    return hash;
+  }
+};
+
+using ClusterRenderCache =
+    std::unordered_map<ClusterCacheKey, ClusterRenderResult,
+                       ClusterCacheKeyHasher>;
+
 struct SessionColrV1Stats {
   ColrV1RenderStats m_renderedStats;
   ColrV1RenderStats m_logicalStats;
@@ -238,8 +257,6 @@ void traceSessionColrV1Stats(const char *label, const SessionColrV1Stats &stats,
 #endif
 }
 
-} // namespace
-
 [[nodiscard]] std::string defaultFontPath() {
   return "fonts/Noto_Color_Emoji/NotoColorEmoji-Regular.ttf";
 }
@@ -249,6 +266,8 @@ void traceSessionColrV1Stats(const char *label, const SessionColrV1Stats &stats,
 }
 
 [[nodiscard]] std::string defaultText() { return "🍣"; }
+
+} // namespace
 
 int runCli(const std::vector<std::string> &args) {
   try {
